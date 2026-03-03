@@ -166,7 +166,7 @@ class PyChart {
                         const xPos = (i) => Math.round(u.valToPos(u.data[timeIdx][i], 'x', true));
                         const yPos = (val) => Math.round(u.valToPos(val, 'y', true));
 
-                        const arrowSize = Math.max(5, Math.min(10, u.bbox.width / (iMax - iMin) * 0.3));
+                        const arrowSize = Math.max(10, Math.min(20, u.bbox.width / (iMax - iMin) * 0.6));
                         const offset = arrowSize * 1.5;
 
                         for (let i = iMin; i <= iMax; i++) {
@@ -230,13 +230,27 @@ class PyChart {
     /**
      * Format an x-axis value for display.
      * If it looks like a Unix-ms timestamp, render as a date. Otherwise show as-is.
+     * @param {number} value - x-axis value
+     * @param {number} [rangeMs] - visible range in ms (controls format density)
      */
-    formatDate(value) {
+    formatDate(value, rangeMs) {
         if (typeof value === 'number' && value > 315360000000) {
-            return new Date(value).toLocaleString(undefined, {
-                month: 'numeric', day: 'numeric',
-                hour: '2-digit', minute: '2-digit'
-            });
+            const d = new Date(value);
+            if (rangeMs != null) {
+                const HOUR = 3600000;
+                const DAY = 86400000;
+                if (rangeMs < 2 * HOUR) {
+                    return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+                }
+                if (rangeMs < 3 * DAY) {
+                    return d.toLocaleString(undefined, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                }
+                if (rangeMs < 180 * DAY) {
+                    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+                }
+                return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short' });
+            }
+            return d.toLocaleString(undefined, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
         }
         return typeof value === 'number' ? Math.round(value).toString() : String(value);
     }
@@ -304,7 +318,36 @@ class PyChart {
                 {
                     stroke: '#888',
                     grid: { stroke: '#eee', width: 1 },
-                    values: (u, vals) => vals.map(v => self.formatDate(v)),
+                    size: 40,
+                    gap: 8,
+                    splits: (u, axisIdx, scaleMin, scaleMax, foundIncr, foundSpace) => {
+                        if (!(typeof scaleMin === 'number' && scaleMin > 315360000000)) {
+                            return uPlot.paths.linear;
+                        }
+                        const range = scaleMax - scaleMin;
+                        const pxWidth = u.bbox.width;
+                        const maxTicks = Math.max(2, Math.floor(pxWidth / 120));
+                        const intervals = [
+                            60000, 120000, 300000, 600000, 900000, 1800000, 3600000,
+                            7200000, 14400000, 28800000, 43200000, 86400000,
+                            172800000, 604800000, 2592000000, 7776000000, 31536000000
+                        ];
+                        let step = intervals[intervals.length - 1];
+                        for (const iv of intervals) {
+                            if (range / iv <= maxTicks) { step = iv; break; }
+                        }
+                        const first = Math.ceil(scaleMin / step) * step;
+                        const splits = [];
+                        for (let v = first; v <= scaleMax; v += step) {
+                            splits.push(v);
+                        }
+                        return splits;
+                    },
+                    values: (u, vals) => {
+                        const s = u.scales.x;
+                        const rangeMs = (s && s.max != null && s.min != null) ? s.max - s.min : null;
+                        return vals.map(v => self.formatDate(v, rangeMs));
+                    },
                 },
                 {
                     stroke: '#888',
