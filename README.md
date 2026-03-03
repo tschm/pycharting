@@ -18,7 +18,8 @@ It runs a lightweight FastAPI server locally, streams your data to a uPlot-based
 - **Million‑point OHLC charts**: optimized for large datetime indices and dense intraday data.
 - **Timeseries x‑axis**: pass a `pd.DatetimeIndex` or Unix‑ms timestamps and the chart renders proper date/time labels that adapt to the zoom level.
 - **Overlays on price**: moving averages, EMAs, or any arbitrary overlay series.
-- **Indicator subplots**: RSI-style and stochastic-style oscillators rendered as separate panels with synced crosshair.
+- **Indicator subplots**: RSI, MACD, volume, or any series rendered as separate panels with synced crosshair. Supports line, bar, and scatter rendering per series.
+- **Multi-series subplots**: a single panel can contain multiple series with mixed types — e.g., MACD line + signal line + histogram bars, or RSI with a moving-average overlay in a different color.
 - **Trade markers**: plot buy/sell arrows directly on the price chart from a simple `+1`/`-1`/`0` signal array.
 - **Viewport management**: server‑side slicing and caching for smooth pan/zoom on huge arrays.
 - **Measurement tool**: Shift‑click to measure price delta, percentage change, and time between two points.
@@ -99,6 +100,38 @@ plot(
 - **Overlays** share the same y‑axis as price and are drawn directly on the candlestick chart (moving averages, bands, signals on price).
 - **Subplots** are stacked independent charts below the main panel with their own y‑scales (oscillators, volume, breadth measures).
 
+### Subplot series types
+
+Each subplot value can be a plain array (line), a dict with options, or a list of dicts for multi-series panels:
+
+```python
+subplots = {
+    # Simple line (default)
+    "RSI": rsi_array,
+
+    # Bar chart — green if value ≥ 0, red if < 0, centered at y=0
+    "Volume": {"data": volume_array, "type": "bar"},
+
+    # Scatter plot
+    "Events": {"data": events_array, "type": "scatter", "color": "#9C27B0"},
+
+    # Multi-series panel: two lines + histogram bars in one subplot
+    "MACD": [
+        {"data": macd_line,   "type": "line", "color": "#2196F3", "label": "MACD"},
+        {"data": signal_line, "type": "line", "color": "#FF9800", "label": "Signal"},
+        {"data": histogram,   "type": "bar",                      "label": "Histogram"},
+    ],
+
+    # RSI with its own moving average overlay
+    "RSI+SMA": [
+        {"data": rsi,     "type": "line", "color": "#FF9800", "label": "RSI"},
+        {"data": rsi_sma, "type": "line", "color": "#2196F3", "label": "RSI SMA(20)"},
+    ],
+}
+```
+
+Supported series types: `"line"` (default), `"bar"`, `"scatter"`. Each entry accepts optional `"color"` (hex string) and `"label"` (legend text).
+
 ## Trade markers
 
 You can overlay buy/sell arrows on the price chart by passing a `trades` array aligned with your index. Values: `1` (buy), `-1` (sell), `0` (no trade).
@@ -166,7 +199,7 @@ result: Dict[str, Any] = plot(
 - **index**: datetime x-axis values — `pd.DatetimeIndex`, Unix timestamps in milliseconds (`np.int64`), or a numeric array.
 - **open/high/low/close**: price series of identical length.
 - **overlays**: mapping of overlay name to series (same length as `close`), rendered on the main price chart.
-- **subplots**: mapping of subplot name to series, rendered as additional charts stacked vertically.
+- **subplots**: mapping of subplot name to series data. Values can be a plain array (line chart), `{"data": array, "type": "bar"|"scatter"|"line", "color": "#hex"}` for a single series with options, or a list of such dicts for multi-series panels. Rendered as additional charts stacked vertically.
 - **trades**: array of `+1` (buy), `-1` (sell), `0` (no trade) signals, same length as `index`. Renders arrows on the price chart.
 - **session_id**: identifier for the data session; can be used to host multiple concurrent charts.
 - **port**: optional port override; if `None`, PyCharting picks an available port.
