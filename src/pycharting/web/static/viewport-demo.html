@@ -295,9 +295,20 @@
             }, 1000);
         }
 
-        // Store timestamps globally so they can be updated on each data fetch
-        let subplotTimestamps = [];
-        let subplotIndices = [];
+        function formatSubplotTick(v, rangeMs) {
+            if (typeof v === 'number' && v > 315360000000) {
+                const d = new Date(v);
+                const HOUR = 3600000, DAY = 86400000;
+                if (rangeMs != null) {
+                    if (rangeMs < 2 * HOUR) return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+                    if (rangeMs < 3 * DAY) return d.toLocaleString(undefined, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+                    if (rangeMs < 180 * DAY) return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+                    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short' });
+                }
+                return d.toLocaleString(undefined, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+            }
+            return typeof v === 'number' ? Math.round(v).toString() : String(v);
+        }
 
         // Create or update subplot charts when backend sends subplots
         function updateSubplots(data) {
@@ -306,29 +317,20 @@
             }
 
             const container = document.getElementById('subplotsContainer');
-            
-            // Use generated indices for X-axis to align with main chart
-            const index = data.xIndices || data.index.map((_, i) => (data.start_index || 0) + i);
-            const timestamps = data.timestamps || data.index;
-            
-            // Update global references for date formatting
-            subplotIndices = index;
-            subplotTimestamps = timestamps;
-            
+            const xValues = data.index;
+
             const names = Object.keys(data.subplots);
 
             if (names.length === 0) return;
 
-            // Expose charts for X-scale syncing from ViewportManager
             window.viewportSubplotCharts = subplotCharts;
 
             names.forEach((name) => {
                 const series = data.subplots[name];
-                if (!Array.isArray(series) || series.length !== index.length) {
+                if (!Array.isArray(series) || series.length !== xValues.length) {
                     return;
                 }
 
-                // Lazily create subplot panel + chart
                 if (!subplotCharts[name]) {
                     const wrapper = document.createElement('div');
                     wrapper.className = 'subplot-wrapper';
@@ -349,14 +351,12 @@
                     wrapper.appendChild(title);
                     wrapper.appendChild(div);
                     container.appendChild(wrapper);
-                    
-                    // Create resize handle below this subplot
+
                     const resizeHandle = document.createElement('div');
                     resizeHandle.className = 'resize-handle';
                     resizeHandle.dataset.target = name;
                     container.appendChild(resizeHandle);
-                    
-                    // Setup resize handler
+
                     setupResizeHandle(resizeHandle, wrapper, div);
 
                     const colors = {
@@ -369,15 +369,11 @@
                         height: 130,
                         series: [
                             {
-                                // Format X labels as dates using global timestamps
                                 value: (u, v) => {
-                                    // Find index in current data
-                                    const idx = subplotIndices.indexOf(v);
-                                    if (idx !== -1 && subplotTimestamps[idx]) {
-                                        return new Date(subplotTimestamps[idx]).toLocaleString();
-                                    }
-                                    return v;
-                                }
+                                    const s = u.scales.x;
+                                    const r = (s && s.max != null && s.min != null) ? s.max - s.min : null;
+                                    return formatSubplotTick(v, r);
+                                },
                             },
                             {
                                 label: name,
@@ -391,27 +387,46 @@
                         },
                         axes: [
                             {
-                                // Minimal x-axis for subplots
                                 show: true,
-                                values: (u, vals) => vals.map(v => {
-                                    const idx = subplotIndices.indexOf(Math.round(v));
-                                    if (idx !== -1 && subplotTimestamps[idx]) {
-                                        // Show shorter time format for subplots
-                                        return new Date(subplotTimestamps[idx]).toLocaleTimeString();
-                                    }
-                                    return v.toFixed(0);
-                                })
+                                size: 40,
+                                gap: 8,
+                                splits: (u, axisIdx, scaleMin, scaleMax) => {
+                                    if (!(typeof scaleMin === 'number' && scaleMin > 315360000000))
+                                        return uPlot.paths.linear;
+                                    const range = scaleMax - scaleMin;
+                                    const maxTicks = Math.max(2, Math.floor(u.bbox.width / 120));
+                                    const intervals = [
+                                        60000,120000,300000,600000,900000,1800000,3600000,
+                                        7200000,14400000,28800000,43200000,86400000,
+                                        172800000,604800000,2592000000,7776000000,31536000000
+                                    ];
+                                    let step = intervals[intervals.length - 1];
+                                    for (const iv of intervals) { if (range / iv <= maxTicks) { step = iv; break; } }
+                                    const first = Math.ceil(scaleMin / step) * step;
+                                    const splits = [];
+                                    for (let v = first; v <= scaleMax; v += step) splits.push(v);
+                                    return splits;
+                                },
+                                values: (u, vals) => {
+                                    const s = u.scales.x;
+                                    const rangeMs = (s && s.max != null && s.min != null) ? s.max - s.min : null;
+                                    return vals.map(v => formatSubplotTick(v, rangeMs));
+                                },
                             },
                             {
                                 label: name,
                                 labelSize: 18,
                             },
                         ],
-                    }, [index, series], div);
+                        cursor: {
+                            drag: { x: false, y: false },
+                            sync: { key: 'pycharting' },
+                        },
+                    }, [xValues, series], div);
 
                     subplotCharts[name] = chart;
                 } else {
-                    subplotCharts[name].setData([index, series]);
+                    subplotCharts[name].setData([xValues, series]);
                 }
             });
         }

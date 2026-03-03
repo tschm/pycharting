@@ -28,6 +28,7 @@ def validate_input(
     close: Optional[Union[pd.Series, np.ndarray]] = None,
     overlays: Optional[Dict[str, Union[pd.Series, np.ndarray]]] = None,
     subplots: Optional[Dict[str, Union[pd.Series, np.ndarray]]] = None,
+    trades: Optional[Union[pd.Series, np.ndarray, list]] = None,
 ) -> Dict[str, Any]:
     """
     Validate and normalize input data for OHLC charting.
@@ -148,6 +149,18 @@ def validate_input(
             # Validate Low <= min(Open, Close)
             pass
 
+    # Validate trades: array of +1 (buy/long), -1 (sell/short), 0 (no trade)
+    trades_arr = None
+    if trades is not None:
+        trades_arr = to_array(trades, "Trades")
+        unique = set(np.unique(trades_arr).tolist())
+        valid_vals = {-1, 0, 1, -1.0, 0.0, 1.0}
+        if not unique.issubset(valid_vals):
+            raise DataValidationError(
+                f"Trades array must contain only -1, 0, or 1. Found: {unique - valid_vals}"
+            )
+        trades_arr = trades_arr.astype(np.int8)
+
     result = {
         "index": index_array,
         "open": final_open,
@@ -156,6 +169,7 @@ def validate_input(
         "close": final_close,
         "overlays": {},
         "subplots": {},
+        "trades": trades_arr,
     }
     
     # Validate and convert overlays
@@ -187,9 +201,10 @@ class DataManager:
         close: Optional[Union[pd.Series, np.ndarray]] = None,
         overlays: Optional[Dict[str, Union[pd.Series, np.ndarray]]] = None,
         subplots: Optional[Dict[str, Union[pd.Series, np.ndarray]]] = None,
+        trades: Optional[Union[pd.Series, np.ndarray, list]] = None,
     ):
         # Validate input and get normalized arrays
-        validated = validate_input(index, open, high, low, close, overlays, subplots)
+        validated = validate_input(index, open, high, low, close, overlays, subplots, trades)
         
         # Store references
         self._index = validated["index"]
@@ -199,6 +214,7 @@ class DataManager:
         self._close = validated["close"]
         self._overlays = validated["overlays"]
         self._subplots = validated["subplots"]
+        self._trades = validated["trades"]
         
         self._length = len(self._index)
     
@@ -216,6 +232,8 @@ class DataManager:
     def overlays(self) -> Dict[str, np.ndarray]: return self._overlays
     @property
     def subplots(self) -> Dict[str, np.ndarray]: return self._subplots
+    @property
+    def trades(self) -> Optional[np.ndarray]: return self._trades
     @property
     def length(self) -> int: return self._length
     def __len__(self) -> int: return self._length
@@ -266,6 +284,7 @@ class DataManager:
             "close": slice_opt(self._close),
             "overlays": {},
             "subplots": {},
+            "trades": slice_opt(self._trades),
         }
         
         for name, data in self._overlays.items():

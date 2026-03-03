@@ -96,7 +96,9 @@ class ViewportManager {
     }
     
     /**
-     * Calculate visible index range from current viewport
+     * Calculate visible index range from current viewport.
+     * X-axis values are the actual data index (timestamps or user-provided values).
+     * We interpolate back to integer positions for the chunking API.
      * @returns {Object} {startIndex, endIndex} with buffer margins
      */
     calculateVisibleRange() {
@@ -112,30 +114,35 @@ class ViewportManager {
             return null;
         }
         
-        // Current viewport in "index space" (we use plain indices on the x-axis)
         const currentMin = scale.min != null ? scale.min : data[0];
         const currentMax = scale.max != null ? scale.max : data[data.length - 1];
         
         const total = this.totalLength != null ? this.totalLength : data.length;
-        
-        // Visible absolute indices (clamped to total length)
-        let visibleStart = Math.max(0, Math.floor(currentMin));
-        let visibleEnd = Math.min(total - 1, Math.ceil(currentMax));
-        
+
+        let visibleStart, visibleEnd;
+
+        const xRange = this._xMax - this._xMin;
+        if (xRange > 0 && this._posCount > 1) {
+            const valuesPerPos = xRange / (this._posCount - 1);
+            visibleStart = Math.floor(this._posStart + (currentMin - this._xMin) / valuesPerPos);
+            visibleEnd = Math.ceil(this._posStart + (currentMax - this._xMin) / valuesPerPos);
+        } else {
+            visibleStart = Math.floor(currentMin);
+            visibleEnd = Math.ceil(currentMax);
+        }
+
+        visibleStart = Math.max(0, visibleStart);
+        visibleEnd = Math.min(total, visibleEnd + 1);
+
         if (visibleEnd < visibleStart) {
             [visibleStart, visibleEnd] = [visibleEnd, visibleStart];
         }
         
-        // For now, request exactly the visible range (no automatic over-buffering)
-        // to avoid runaway prefetching when the chart first initializes.
-        const startIndex = visibleStart;
-        const endIndex = visibleEnd + 1; // +1 for exclusive end
-        
         return {
-            startIndex,
-            endIndex,
+            startIndex: visibleStart,
+            endIndex: visibleEnd,
             visibleStart,
-            visibleEnd
+            visibleEnd: visibleEnd - 1
         };
     }
     
@@ -233,46 +240,39 @@ class ViewportManager {
      * @param {Object} data - Data from API
      */
     updateChartData(data) {
-        // Generate array of integer indices for X-axis
-        const startIndex = data.start_index || 0;
-        const xIndices = data.index.map((_, i) => startIndex + i);
-        const len = xIndices.length;
-        
-        // Helper to ensure data array exists
+        const xValues = data.index;
+        const len = xValues.length;
+
         const ensureArray = (arr) => arr || Array(len).fill(null);
 
-        // Keep timestamps for labeling
-        const timestamps = data.index;
-
-        // Convert data format to uPlot format
-        // Use xIndices for the first array (X-axis)
-        // Ensure all series are arrays, even if null in API response
         const chartData = [
-            xIndices,
+            xValues,
             ensureArray(data.open),
             ensureArray(data.high),
             ensureArray(data.low),
             ensureArray(data.close)
         ];
-        
-        // Add overlays if present
+
         if (data.overlays) {
             Object.values(data.overlays).forEach(overlay => {
                 chartData.push(overlay);
             });
         }
-        
-        // Update chart with indices as X, and pass timestamps for formatting
-        this.chart.setData(chartData, timestamps);
-        
-        // Ensure listeners are set up (needed if chart was just created/recreated)
+
+        if (data.trades) {
+            this.chart.setTrades(data.trades);
+        }
+
+        this.chart.setData(chartData);
+
+        // Store mapping from x-value space back to position space for viewport calculations
+        this._posStart = data.start_index || 0;
+        this._posCount = len;
+        this._xMin = xValues[0];
+        this._xMax = xValues[len - 1];
+
         this.setupEventListeners();
 
-        // Notify any subplot handlers with full data payload
-        // Pass both xIndices and timestamps for proper date formatting
-        data.xIndices = xIndices;
-        data.timestamps = timestamps;
-        
         this.subplotCallbacks.forEach((cb) => {
             if (typeof cb === 'function') {
                 cb(data, this);
