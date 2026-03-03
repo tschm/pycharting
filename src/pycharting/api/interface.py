@@ -134,13 +134,17 @@ def plot(
                 for k, v in overlays.items()
             }
         
-        # Convert subplot lists (value can be array or {"data": array, "type": "bar"})
         if subplots:
             converted = {}
             for k, v in subplots.items():
-                if isinstance(v, dict):
+                if isinstance(v, list) and len(v) > 0 and isinstance(v[0], dict):
+                    converted[k] = [
+                        {**entry, "data": np.array(entry["data"]) if isinstance(entry.get("data"), list) else entry.get("data")}
+                        for entry in v
+                    ]
+                elif isinstance(v, dict):
                     d = v.get("data")
-                    converted[k] = {"data": np.array(d) if isinstance(d, list) else d, "type": v.get("type", "line")}
+                    converted[k] = {**v, "data": np.array(d) if isinstance(d, list) else d}
                 else:
                     converted[k] = np.array(v) if isinstance(v, list) else v
             subplots = converted
