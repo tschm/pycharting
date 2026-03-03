@@ -11,7 +11,7 @@ High‑performance financial charting library for OHLC data visualization with t
 PyCharting lets you render large OHLC time series (hundreds of thousands to millions of candles) in the browser with a single Python call.  
 It runs a lightweight FastAPI server locally, streams your data to a uPlot-based frontend, and gives you an interactive viewport with overlays and indicator subplots.
 
-![PyCharting demo](demo.png)
+![PyCharting demo](demo.png?v=2)
 
 ## Features
 
