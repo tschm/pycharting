@@ -114,6 +114,15 @@ def run_demo(choice: str):
         plot(numeric_index, open=open_, overlays=overlays, subplots=subplots)
 
     elif choice == "7":
+        print("\n--- Demo: Candlesticks with Trade Arrows ---")
+        date_index = pd.date_range(start="2024-01-01", periods=n, freq="h")
+        trades = np.zeros(n, dtype=int)
+        signal_mask = np.random.rand(n) < 0.02
+        trades[signal_mask] = np.random.choice([-1, 1], size=signal_mask.sum())
+        plot(date_index, open=open_, high=high, low=low, close=close,
+             overlays=overlays, subplots=subplots, trades=trades)
+
+    elif choice == "8":
         print("\n--- Stress Test (1 Million Points) with Indicators ---")
         n_stress = 1_000_000
         o, h, l, c, ovr, sub = generate_ohlc(n_stress)
@@ -136,11 +145,12 @@ def main():
             print("4. Line Chart   - Numeric Index (Close only)")
             print("5. Line Chart   - Datetime Index (Close only)")
             print("6. Line Chart   - Open Price only (Flexible Input)")
-            print("7. Stress Test  - 1 Million Candles")
+            print("7. Trade Arrows - Buy/Sell Signals on Chart")
+            print("8. Stress Test  - 1 Million Candles")
             print("0. Exit")
             print("="*40)
             
-            choice = input("Select a demo (0-7): ").strip()
+            choice = input("Select a demo (0-8): ").strip()
             
             if choice == "0":
                 break

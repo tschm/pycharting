@@ -40,6 +40,7 @@ def plot(
     close: Optional[Union[np.ndarray, pd.Series, list]] = None,
     overlays: Optional[Dict[str, Union[np.ndarray, pd.Series, list]]] = None,
     subplots: Optional[Dict[str, Union[np.ndarray, pd.Series, list]]] = None,
+    trades: Optional[Union[np.ndarray, pd.Series, list]] = None,
     session_id: str = "default",
     port: Optional[int] = None,
     open_browser: bool = True,
@@ -140,6 +141,10 @@ def plot(
                 for k, v in subplots.items()
             }
         
+        # Convert trades list
+        if isinstance(trades, list):
+            trades = np.array(trades)
+        
         # Create DataManager with validation
         logger.info("Creating DataManager...")
         data_manager = DataManager(
@@ -149,7 +154,8 @@ def plot(
             low=low,
             close=close,
             overlays=overlays,
-            subplots=subplots
+            subplots=subplots,
+            trades=trades,
         )
         
         # Store in global session registry for API access

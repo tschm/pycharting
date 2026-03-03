@@ -21,6 +21,7 @@ class PyChart {
         
         this.chart = null;
         this.data = null;
+        this.trades = null;
         this.measurementButtonElement = null;
         this.exportButtonElement = null; // Track export button
     }
@@ -110,32 +111,108 @@ class PyChart {
     }
     
     /**
-     * Set chart data and render
-     * @param {Array} data - Chart data [xValues, open, high, low, close, ...overlays]
-     * @param {Array} timestamps - Optional array of timestamps corresponding to xValues
+     * Set trade signals array.
+     * @param {Array} trades - Array of +1 (buy), -1 (sell), 0 (no trade), aligned with data indices
      */
-    setData(data, timestamps = null) {
+    setTrades(trades) {
+        this.trades = trades;
+    }
+
+    /**
+     * uPlot plugin that draws trade arrows on the chart.
+     * Buy (+1): green upward arrow below the low.
+     * Sell (-1): red downward arrow above the high.
+     */
+    tradesPlugin() {
+        const self = this;
+
+        const drawArrow = (ctx, x, y, size, up) => {
+            ctx.beginPath();
+            if (up) {
+                ctx.moveTo(x, y - size);
+                ctx.lineTo(x - size * 0.6, y + size * 0.3);
+                ctx.lineTo(x - size * 0.2, y + size * 0.3);
+                ctx.lineTo(x - size * 0.2, y + size);
+                ctx.lineTo(x + size * 0.2, y + size);
+                ctx.lineTo(x + size * 0.2, y + size * 0.3);
+                ctx.lineTo(x + size * 0.6, y + size * 0.3);
+            } else {
+                ctx.moveTo(x, y + size);
+                ctx.lineTo(x - size * 0.6, y - size * 0.3);
+                ctx.lineTo(x - size * 0.2, y - size * 0.3);
+                ctx.lineTo(x - size * 0.2, y - size);
+                ctx.lineTo(x + size * 0.2, y - size);
+                ctx.lineTo(x + size * 0.2, y - size * 0.3);
+                ctx.lineTo(x + size * 0.6, y - size * 0.3);
+            }
+            ctx.closePath();
+            ctx.fill();
+        };
+
+        return {
+            hooks: {
+                draw: [
+                    (u) => {
+                        if (!self.trades || self.trades.length === 0) return;
+
+                        const ctx = u.ctx;
+                        const [iMin, iMax] = u.series[0].idxs;
+
+                        const timeIdx = 0;
+                        const highIdx = 2;
+                        const lowIdx = 3;
+                        const closeIdx = 4;
+
+                        const xPos = (i) => Math.round(u.valToPos(u.data[timeIdx][i], 'x', true));
+                        const yPos = (val) => Math.round(u.valToPos(val, 'y', true));
+
+                        const arrowSize = Math.max(5, Math.min(10, u.bbox.width / (iMax - iMin) * 0.3));
+                        const offset = arrowSize * 1.5;
+
+                        for (let i = iMin; i <= iMax; i++) {
+                            if (i < 0 || i >= self.trades.length) continue;
+                            const signal = self.trades[i];
+                            if (signal === 0) continue;
+
+                            const x = xPos(i);
+
+                            if (signal === 1) {
+                                const low = u.data[lowIdx] ? u.data[lowIdx][i] : u.data[closeIdx][i];
+                                if (low == null) continue;
+                                const y = yPos(low) + offset;
+                                ctx.fillStyle = '#26a69a';
+                                drawArrow(ctx, x, y, arrowSize, true);
+                            } else if (signal === -1) {
+                                const high = u.data[highIdx] ? u.data[highIdx][i] : u.data[closeIdx][i];
+                                if (high == null) continue;
+                                const y = yPos(high) - offset;
+                                ctx.fillStyle = '#ef5350';
+                                drawArrow(ctx, x, y, arrowSize, false);
+                            }
+                        }
+                    }
+                ]
+            }
+        };
+    }
+
+    /**
+     * Set chart data and render.
+     * @param {Array} data - Chart data [xValues, open, high, low, close, ...overlays]
+     *   xValues are the actual index values (timestamps in ms, or numeric).
+     */
+    setData(data) {
         const prevLen = this.data ? this.data.length : null;
-        const prevHadTimestamps = this.timestamps != null;
-        const nowHasTimestamps = timestamps != null;
         
         this.data = data;
-        this.timestamps = timestamps;
         
-        // Rebuild chart if:
-        // 1. Series count changed (e.g., overlays added)
-        // 2. Timestamp presence changed (affects axis formatting)
-        const needsRebuild = !this.chart || 
-                             prevLen !== data.length || 
-                             prevHadTimestamps !== nowHasTimestamps;
+        const needsRebuild = !this.chart || prevLen !== data.length;
         
         if (this.chart && !needsRebuild) {
-            // Fast path: just update data
             this.chart.setData(data);
             return;
         }
         
-        // Rebuild chart
         if (this.chart) {
             this.chart.destroy();
             this.chart = null;
@@ -145,40 +222,23 @@ class PyChart {
         this.chart = new uPlot(config, data, this.container);
         this._setupInteractions();
         
-        // Add export button (only once)
         if (!this.exportButtonElement) {
             this.addExportButton();
         }
     }
 
     /**
-     * Helper to format x-axis values (indices) to dates
+     * Format an x-axis value for display.
+     * If it looks like a Unix-ms timestamp, render as a date. Otherwise show as-is.
      */
-    formatDate(index) {
-        if (!this.timestamps) {
-            return index;
+    formatDate(value) {
+        if (typeof value === 'number' && value > 315360000000) {
+            return new Date(value).toLocaleString(undefined, {
+                month: 'numeric', day: 'numeric',
+                hour: '2-digit', minute: '2-digit'
+            });
         }
-        
-        if (this.data && this.data[0] && this.data[0].length > 0) {
-            const startIndex = this.data[0][0];
-            const dataIndex = Math.round(index - startIndex);
-            
-            if (dataIndex >= 0 && dataIndex < this.timestamps.length) {
-                const val = this.timestamps[dataIndex];
-                
-                // Heuristic: Only format as date if value looks like a timestamp (milliseconds)
-                // Threshold: Year 1980 (~3.15e11 ms)
-                if (typeof val === 'number' && val > 315360000000) {
-                    const date = new Date(val);
-                    return date.toLocaleString(undefined, {
-                        month: 'numeric', day: 'numeric', 
-                        hour: '2-digit', minute: '2-digit'
-                    });
-                }
-                return val;
-            }
-        }
-        return index;
+        return typeof value === 'number' ? Math.round(value).toString() : String(value);
     }
     
     /**
@@ -244,10 +304,7 @@ class PyChart {
                 {
                     stroke: '#888',
                     grid: { stroke: '#eee', width: 1 },
-                    values: (u, vals) => vals.map(v => {
-                        const idx = Math.round(v);
-                        return self.formatDate(idx);
-                    }),
+                    values: (u, vals) => vals.map(v => self.formatDate(v)),
                 },
                 {
                     stroke: '#888',
@@ -255,7 +312,10 @@ class PyChart {
                     values: (u, vals) => vals.map(v => v.toFixed(2)),
                 }
             ],
-            plugins: hasOHLC ? [this.candlestickPlugin()] : [],
+            plugins: [
+                ...(hasOHLC ? [this.candlestickPlugin()] : []),
+                this.tradesPlugin(),
+            ],
             cursor: {
                 drag: { x: false, y: false },
                 sync: { key: 'pycharting' }
@@ -507,22 +567,13 @@ class PyChart {
             const deltaVal = ms.endValY - ms.startValY;
             const deltaPercent = ((deltaVal / ms.startValY) * 100).toFixed(2);
             
-            // Calculate time delta
+            // Calculate time delta — x-values are actual index values
             let timeDeltaStr = '';
-            if (this.timestamps) {
-                const startIdx = Math.round(ms.startValX);
-                const endIdx = Math.round(ms.endValX);
-                const startDataIdx = Math.max(0, Math.min(this.timestamps.length - 1, startIdx - (this.chart.data[0][0] || 0)));
-                const endDataIdx = Math.max(0, Math.min(this.timestamps.length - 1, endIdx - (this.chart.data[0][0] || 0)));
-                
-                if (this.timestamps[startDataIdx] && this.timestamps[endDataIdx]) {
-                    const timeDelta = this.timestamps[endDataIdx] - this.timestamps[startDataIdx];
-                    timeDeltaStr = formatTimeDelta(timeDelta);
-                } else {
-                    timeDeltaStr = `${Math.abs(endIdx - startIdx).toFixed(0)} bars`;
-                }
+            const deltaX = Math.abs(ms.endValX - ms.startValX);
+            if (typeof ms.startValX === 'number' && ms.startValX > 315360000000) {
+                timeDeltaStr = formatTimeDelta(deltaX);
             } else {
-                timeDeltaStr = `${Math.abs(ms.endValX - ms.startValX).toFixed(0)} bars`;
+                timeDeltaStr = `${deltaX.toFixed(0)} bars`;
             }
             
             // Draw measurement box

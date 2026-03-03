@@ -295,9 +295,15 @@
             }, 1000);
         }
 
-        // Store timestamps globally so they can be updated on each data fetch
-        let subplotTimestamps = [];
-        let subplotIndices = [];
+        function formatSubplotTick(v) {
+            if (typeof v === 'number' && v > 315360000000) {
+                return new Date(v).toLocaleString(undefined, {
+                    month: 'numeric', day: 'numeric',
+                    hour: '2-digit', minute: '2-digit'
+                });
+            }
+            return typeof v === 'number' ? Math.round(v).toString() : String(v);
+        }
 
         // Create or update subplot charts when backend sends subplots
         function updateSubplots(data) {
@@ -306,29 +312,20 @@
             }
 
             const container = document.getElementById('subplotsContainer');
-            
-            // Use generated indices for X-axis to align with main chart
-            const index = data.xIndices || data.index.map((_, i) => (data.start_index || 0) + i);
-            const timestamps = data.timestamps || data.index;
-            
-            // Update global references for date formatting
-            subplotIndices = index;
-            subplotTimestamps = timestamps;
-            
+            const xValues = data.index;
+
             const names = Object.keys(data.subplots);
 
             if (names.length === 0) return;
 
-            // Expose charts for X-scale syncing from ViewportManager
             window.viewportSubplotCharts = subplotCharts;
 
             names.forEach((name) => {
                 const series = data.subplots[name];
-                if (!Array.isArray(series) || series.length !== index.length) {
+                if (!Array.isArray(series) || series.length !== xValues.length) {
                     return;
                 }
 
-                // Lazily create subplot panel + chart
                 if (!subplotCharts[name]) {
                     const wrapper = document.createElement('div');
                     wrapper.className = 'subplot-wrapper';
@@ -349,14 +346,12 @@
                     wrapper.appendChild(title);
                     wrapper.appendChild(div);
                     container.appendChild(wrapper);
-                    
-                    // Create resize handle below this subplot
+
                     const resizeHandle = document.createElement('div');
                     resizeHandle.className = 'resize-handle';
                     resizeHandle.dataset.target = name;
                     container.appendChild(resizeHandle);
-                    
-                    // Setup resize handler
+
                     setupResizeHandle(resizeHandle, wrapper, div);
 
                     const colors = {
@@ -369,15 +364,7 @@
                         height: 130,
                         series: [
                             {
-                                // Format X labels as dates using global timestamps
-                                value: (u, v) => {
-                                    // Find index in current data
-                                    const idx = subplotIndices.indexOf(v);
-                                    if (idx !== -1 && subplotTimestamps[idx]) {
-                                        return new Date(subplotTimestamps[idx]).toLocaleString();
-                                    }
-                                    return v;
-                                }
+                                value: (u, v) => formatSubplotTick(v),
                             },
                             {
                                 label: name,
@@ -391,27 +378,19 @@
                         },
                         axes: [
                             {
-                                // Minimal x-axis for subplots
                                 show: true,
-                                values: (u, vals) => vals.map(v => {
-                                    const idx = subplotIndices.indexOf(Math.round(v));
-                                    if (idx !== -1 && subplotTimestamps[idx]) {
-                                        // Show shorter time format for subplots
-                                        return new Date(subplotTimestamps[idx]).toLocaleTimeString();
-                                    }
-                                    return v.toFixed(0);
-                                })
+                                values: (u, vals) => vals.map(formatSubplotTick),
                             },
                             {
                                 label: name,
                                 labelSize: 18,
                             },
                         ],
-                    }, [index, series], div);
+                    }, [xValues, series], div);
 
                     subplotCharts[name] = chart;
                 } else {
-                    subplotCharts[name].setData([index, series]);
+                    subplotCharts[name].setData([xValues, series]);
                 }
             });
         }
