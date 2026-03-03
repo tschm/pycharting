@@ -295,6 +295,44 @@
             }, 1000);
         }
 
+        function barPlugin() {
+            return {
+                hooks: {
+                    draw: [
+                        (u) => {
+                            const ctx = u.ctx;
+                            const xData = u.data[0];
+                            const yData = u.data[1];
+                            if (!xData || !yData) return;
+
+                            const idxs = u.series[1].idxs;
+                            const iMin = idxs ? idxs[0] : 0;
+                            const iMax = idxs ? idxs[1] : xData.length - 1;
+
+                            const xPos = (i) => Math.round(u.valToPos(xData[i], 'x', true));
+                            const yPos = (val) => Math.round(u.valToPos(val, 'y', true));
+                            const y0 = yPos(0);
+
+                            const numBars = Math.max(1, iMax - iMin);
+                            const barWidth = Math.max(1, Math.floor((u.bbox.width / numBars) * 0.65));
+
+                            for (let i = iMin; i <= iMax; i++) {
+                                const val = yData[i];
+                                if (val == null) continue;
+
+                                const x = xPos(i);
+                                const y = yPos(val);
+                                const h = Math.abs(y - y0);
+
+                                ctx.fillStyle = val >= 0 ? '#26a69a' : '#ef5350';
+                                ctx.fillRect(x - barWidth / 2, Math.min(y, y0), barWidth, h || 1);
+                            }
+                        }
+                    ]
+                }
+            };
+        }
+
         function formatSubplotTick(v, rangeMs) {
             if (typeof v === 'number' && v > 315360000000) {
                 const d = new Date(v);
@@ -325,11 +363,43 @@
 
             window.viewportSubplotCharts = subplotCharts;
 
+            const subplotTypes = data.subplot_types || {};
+
+            const xAxisConfig = {
+                show: true,
+                size: 40,
+                gap: 8,
+                splits: (u, axisIdx, scaleMin, scaleMax) => {
+                    if (!(typeof scaleMin === 'number' && scaleMin > 315360000000))
+                        return uPlot.paths.linear;
+                    const range = scaleMax - scaleMin;
+                    const maxTicks = Math.max(2, Math.floor(u.bbox.width / 120));
+                    const intervals = [
+                        60000,120000,300000,600000,900000,1800000,3600000,
+                        7200000,14400000,28800000,43200000,86400000,
+                        172800000,604800000,2592000000,7776000000,31536000000
+                    ];
+                    let step = intervals[intervals.length - 1];
+                    for (const iv of intervals) { if (range / iv <= maxTicks) { step = iv; break; } }
+                    const first = Math.ceil(scaleMin / step) * step;
+                    const splits = [];
+                    for (let v = first; v <= scaleMax; v += step) splits.push(v);
+                    return splits;
+                },
+                values: (u, vals) => {
+                    const s = u.scales.x;
+                    const rangeMs = (s && s.max != null && s.min != null) ? s.max - s.min : null;
+                    return vals.map(v => formatSubplotTick(v, rangeMs));
+                },
+            };
+
             names.forEach((name) => {
                 const series = data.subplots[name];
                 if (!Array.isArray(series) || series.length !== xValues.length) {
                     return;
                 }
+
+                const isBar = subplotTypes[name] === 'bar';
 
                 if (!subplotCharts[name]) {
                     const wrapper = document.createElement('div');
@@ -359,15 +429,10 @@
 
                     setupResizeHandle(resizeHandle, wrapper, div);
 
-                    const colors = {
-                        RSI_like: '#f44336',
-                        Stoch_like: '#9C27B0',
-                    };
+                    const lineColors = { RSI_like: '#f44336', Stoch_like: '#9C27B0' };
 
-                    const chart = new uPlot({
-                        width: container.clientWidth || 800,
-                        height: 130,
-                        series: [
+                    const seriesConfig = isBar
+                        ? [
                             {
                                 value: (u, v) => {
                                     const s = u.scales.x;
@@ -377,53 +442,49 @@
                             },
                             {
                                 label: name,
-                                stroke: colors[name] || '#FF9800',
+                                stroke: 'transparent',
+                                paths: () => null,
+                                points: { show: false },
+                            },
+                          ]
+                        : [
+                            {
+                                value: (u, v) => {
+                                    const s = u.scales.x;
+                                    const r = (s && s.max != null && s.min != null) ? s.max - s.min : null;
+                                    return formatSubplotTick(v, r);
+                                },
+                            },
+                            {
+                                label: name,
+                                stroke: lineColors[name] || '#FF9800',
                                 width: 2,
                             },
-                        ],
+                          ];
+
+                    const chartOpts = {
+                        width: container.clientWidth || 800,
+                        height: 130,
+                        series: seriesConfig,
                         scales: {
                             x: { time: false },
                             y: { auto: true },
                         },
                         axes: [
-                            {
-                                show: true,
-                                size: 40,
-                                gap: 8,
-                                splits: (u, axisIdx, scaleMin, scaleMax) => {
-                                    if (!(typeof scaleMin === 'number' && scaleMin > 315360000000))
-                                        return uPlot.paths.linear;
-                                    const range = scaleMax - scaleMin;
-                                    const maxTicks = Math.max(2, Math.floor(u.bbox.width / 120));
-                                    const intervals = [
-                                        60000,120000,300000,600000,900000,1800000,3600000,
-                                        7200000,14400000,28800000,43200000,86400000,
-                                        172800000,604800000,2592000000,7776000000,31536000000
-                                    ];
-                                    let step = intervals[intervals.length - 1];
-                                    for (const iv of intervals) { if (range / iv <= maxTicks) { step = iv; break; } }
-                                    const first = Math.ceil(scaleMin / step) * step;
-                                    const splits = [];
-                                    for (let v = first; v <= scaleMax; v += step) splits.push(v);
-                                    return splits;
-                                },
-                                values: (u, vals) => {
-                                    const s = u.scales.x;
-                                    const rangeMs = (s && s.max != null && s.min != null) ? s.max - s.min : null;
-                                    return vals.map(v => formatSubplotTick(v, rangeMs));
-                                },
-                            },
-                            {
-                                label: name,
-                                labelSize: 18,
-                            },
+                            xAxisConfig,
+                            { label: name, labelSize: 18 },
                         ],
                         cursor: {
                             drag: { x: false, y: false },
                             sync: { key: 'pycharting' },
                         },
-                    }, [xValues, series], div);
+                    };
 
+                    if (isBar) {
+                        chartOpts.plugins = [barPlugin()];
+                    }
+
+                    const chart = new uPlot(chartOpts, [xValues, series], div);
                     subplotCharts[name] = chart;
                 } else {
                     subplotCharts[name].setData([xValues, series]);

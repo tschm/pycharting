@@ -66,7 +66,7 @@ def generate_ohlc(n: int = 1000):
     
     subplots = {
         "RSI": rsi,
-        "Volume": volume,
+        "Volume": {"data": volume, "type": "bar"},
     }
     
     return open_, high, low, close, overlays, subplots
@@ -114,13 +114,20 @@ def run_demo(choice: str):
         plot(numeric_index, open=open_, overlays=overlays, subplots=subplots)
 
     elif choice == "7":
-        print("\n--- Demo: Candlesticks with Trade Arrows ---")
+        print("\n--- Demo: Candlesticks with Trade Arrows + Volume Bars ---")
         date_index = pd.date_range(start="2024-01-01", periods=n, freq="h")
         trades = np.zeros(n, dtype=int)
         signal_mask = np.random.rand(n) < 0.02
         trades[signal_mask] = np.random.choice([-1, 1], size=signal_mask.sum())
+        vol_raw = np.abs(np.random.randn(n)) * 10000 + 5000
+        vol_sign = np.where(close >= open_, 1, -1)
+        signed_vol = vol_raw * vol_sign
+        vol_subplots = {
+            "RSI": subplots["RSI"],
+            "Volume": {"data": signed_vol, "type": "bar"},
+        }
         plot(date_index, open=open_, high=high, low=low, close=close,
-             overlays=overlays, subplots=subplots, trades=trades)
+             overlays=overlays, subplots=vol_subplots, trades=trades)
 
     elif choice == "8":
         print("\n--- Stress Test (1 Million Points) with Indicators ---")

@@ -178,11 +178,17 @@ def validate_input(
             arr = to_array(data, f"Overlay '{name}'")
             result["overlays"][name] = arr
     
-    # Validate and convert subplots
+    # Validate and convert subplots (value can be array or {"data": array, "type": "bar"})
+    subplot_types = {}
     if subplots:
         for name, data in subplots.items():
-            arr = to_array(data, f"Subplot '{name}'")
+            if isinstance(data, dict):
+                arr = to_array(data.get("data"), f"Subplot '{name}'")
+                subplot_types[name] = data.get("type", "line")
+            else:
+                arr = to_array(data, f"Subplot '{name}'")
             result["subplots"][name] = arr
+    result["subplot_types"] = subplot_types
     
     return result
 
@@ -214,6 +220,7 @@ class DataManager:
         self._close = validated["close"]
         self._overlays = validated["overlays"]
         self._subplots = validated["subplots"]
+        self._subplot_types = validated["subplot_types"]
         self._trades = validated["trades"]
         
         self._length = len(self._index)
@@ -232,6 +239,8 @@ class DataManager:
     def overlays(self) -> Dict[str, np.ndarray]: return self._overlays
     @property
     def subplots(self) -> Dict[str, np.ndarray]: return self._subplots
+    @property
+    def subplot_types(self) -> Dict[str, str]: return self._subplot_types
     @property
     def trades(self) -> Optional[np.ndarray]: return self._trades
     @property
@@ -292,5 +301,8 @@ class DataManager:
         
         for name, data in self._subplots.items():
             result["subplots"][name] = data[start_index:end_index].tolist()
+        
+        if self._subplot_types:
+            result["subplot_types"] = self._subplot_types
         
         return result

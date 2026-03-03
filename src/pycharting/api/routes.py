@@ -35,6 +35,7 @@ class DataResponse(BaseModel):
     close: Optional[list] = None
     overlays: Dict[str, list] = Field(default_factory=dict)
     subplots: Dict[str, list] = Field(default_factory=dict)
+    subplot_types: Dict[str, str] = Field(default_factory=dict)
     trades: Optional[list] = None
     start_index: int
     end_index: int
