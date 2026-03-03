@@ -15,10 +15,13 @@ It runs a lightweight FastAPI server locally, streams your data to a uPlot-based
 
 ## Features
 
-- **Million‑point OHLC charts**: optimized for large numeric indices and dense intraday data.
+- **Million‑point OHLC charts**: optimized for large datetime indices and dense intraday data.
+- **Timeseries x‑axis**: pass a `pd.DatetimeIndex` or Unix‑ms timestamps and the chart renders proper date/time labels that adapt to the zoom level.
 - **Overlays on price**: moving averages, EMAs, or any arbitrary overlay series.
-- **Indicator subplots**: RSI-style and stochastic-style oscillators rendered as separate panels.
+- **Indicator subplots**: RSI-style and stochastic-style oscillators rendered as separate panels with synced crosshair.
+- **Trade markers**: plot buy/sell arrows directly on the price chart from a simple `+1`/`-1`/`0` signal array.
 - **Viewport management**: server‑side slicing and caching for smooth pan/zoom on huge arrays.
+- **Measurement tool**: Shift‑click to measure price delta, percentage change, and time between two points.
 - **FastAPI + uPlot stack**: Python on the backend, ultra‑light JS on the frontend.
 - **Simple Python API**: one main entry point, `plot(...)`, plus helpers to manage the server.
 
@@ -96,7 +99,30 @@ plot(
 - **Overlays** share the same y‑axis as price and are drawn directly on the candlestick chart (moving averages, bands, signals on price).
 - **Subplots** are stacked independent charts below the main panel with their own y‑scales (oscillators, volume, breadth measures).
 
-See `demo.py` for a full example that generates synthetic data and wires up both overlays and indicator-style subplots.
+## Trade markers
+
+You can overlay buy/sell arrows on the price chart by passing a `trades` array aligned with your index. Values: `1` (buy), `-1` (sell), `0` (no trade).
+
+```python
+import numpy as np
+
+trades = np.zeros(len(index), dtype=int)
+trades[42] = 1    # buy at bar 42
+trades[100] = -1   # sell at bar 100
+
+plot(
+    index,
+    open=open_,
+    high=high,
+    low=low,
+    close=close,
+    trades=trades,
+)
+```
+
+Buy signals render as green upward arrows below the low; sell signals render as red downward arrows above the high.
+
+See `demo.py` for a full example that generates synthetic data and wires up overlays, subplots, and trade markers.
 
 Run the demo from the project root:
 
@@ -129,6 +155,7 @@ result: Dict[str, Any] = plot(
     close: ArrayLike,
     overlays: Optional[Dict[str, ArrayLike]] = None,
     subplots: Optional[Dict[str, ArrayLike]] = None,
+    trades: Optional[ArrayLike] = None,
     session_id: str = "default",
     port: Optional[int] = None,
     open_browser: bool = True,
@@ -136,10 +163,11 @@ result: Dict[str, Any] = plot(
 )
 ```
 
-- **index**: numeric or datetime-like x-axis values (internally treated as numeric indices).
+- **index**: datetime x-axis values — `pd.DatetimeIndex`, Unix timestamps in milliseconds (`np.int64`), or a numeric array.
 - **open/high/low/close**: price series of identical length.
 - **overlays**: mapping of overlay name to series (same length as `close`), rendered on the main price chart.
 - **subplots**: mapping of subplot name to series, rendered as additional charts stacked vertically.
+- **trades**: array of `+1` (buy), `-1` (sell), `0` (no trade) signals, same length as `index`. Renders arrows on the price chart.
 - **session_id**: identifier for the data session; can be used to host multiple concurrent charts.
 - **port**: optional port override; if `None`, PyCharting picks an available port.
 - **open_browser**: if `False`, you get the URL back in `result["url"]` but the browser is not opened automatically.
