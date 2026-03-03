@@ -295,6 +295,86 @@
             }, 1000);
         }
 
+        function barPlugin(seriesIndices) {
+            return {
+                hooks: {
+                    draw: [
+                        (u) => {
+                            const ctx = u.ctx;
+                            const xData = u.data[0];
+                            if (!xData) return;
+
+                            for (const si of seriesIndices) {
+                                const yData = u.data[si.idx];
+                                if (!yData) continue;
+
+                                const ref = u.series[si.idx];
+                                const idxs = ref && ref.idxs;
+                                const iMin = idxs ? idxs[0] : 0;
+                                const iMax = idxs ? idxs[1] : xData.length - 1;
+
+                                const xPos = (i) => Math.round(u.valToPos(xData[i], 'x', true));
+                                const yPos = (val) => Math.round(u.valToPos(val, 'y', true));
+                                const y0 = yPos(0);
+
+                                const numBars = Math.max(1, iMax - iMin);
+                                const barWidth = Math.max(1, Math.floor((u.bbox.width / numBars) * 0.65));
+
+                                for (let i = iMin; i <= iMax; i++) {
+                                    const val = yData[i];
+                                    if (val == null) continue;
+                                    const x = xPos(i);
+                                    const y = yPos(val);
+                                    const h = Math.abs(y - y0);
+                                    ctx.fillStyle = si.color
+                                        ? (val >= 0 ? si.color : si.colorNeg || si.color)
+                                        : (val >= 0 ? '#26a69a' : '#ef5350');
+                                    ctx.fillRect(x - barWidth / 2, Math.min(y, y0), barWidth, h || 1);
+                                }
+                            }
+                        }
+                    ]
+                }
+            };
+        }
+
+        function scatterPlugin(seriesIndices) {
+            return {
+                hooks: {
+                    draw: [
+                        (u) => {
+                            const ctx = u.ctx;
+                            const xData = u.data[0];
+                            if (!xData) return;
+
+                            for (const si of seriesIndices) {
+                                const yData = u.data[si.idx];
+                                if (!yData) continue;
+
+                                const ref = u.series[si.idx];
+                                const idxs = ref && ref.idxs;
+                                const iMin = idxs ? idxs[0] : 0;
+                                const iMax = idxs ? idxs[1] : xData.length - 1;
+
+                                const radius = si.size || 3;
+
+                                for (let i = iMin; i <= iMax; i++) {
+                                    const val = yData[i];
+                                    if (val == null) continue;
+                                    const x = Math.round(u.valToPos(xData[i], 'x', true));
+                                    const y = Math.round(u.valToPos(val, 'y', true));
+                                    ctx.beginPath();
+                                    ctx.arc(x, y, radius, 0, Math.PI * 2);
+                                    ctx.fillStyle = si.color || '#9C27B0';
+                                    ctx.fill();
+                                }
+                            }
+                        }
+                    ]
+                }
+            };
+        }
+
         function formatSubplotTick(v, rangeMs) {
             if (typeof v === 'number' && v > 315360000000) {
                 const d = new Date(v);
@@ -310,35 +390,106 @@
             return typeof v === 'number' ? Math.round(v).toString() : String(v);
         }
 
-        // Create or update subplot charts when backend sends subplots
         function updateSubplots(data) {
-            if (!data || !data.subplots || !data.index) {
-                return;
-            }
+            if (!data || !data.subplots || !data.index) return;
 
             const container = document.getElementById('subplotsContainer');
             const xValues = data.index;
+            const meta = data.subplot_meta || {};
+            const panelNames = Object.keys(meta);
 
-            const names = Object.keys(data.subplots);
-
-            if (names.length === 0) return;
+            if (panelNames.length === 0) return;
 
             window.viewportSubplotCharts = subplotCharts;
 
-            names.forEach((name) => {
-                const series = data.subplots[name];
-                if (!Array.isArray(series) || series.length !== xValues.length) {
-                    return;
-                }
+            const defaultColors = ['#FF9800', '#2196F3', '#9C27B0', '#4CAF50', '#f44336', '#00BCD4', '#795548'];
 
-                if (!subplotCharts[name]) {
+            const xAxisConfig = {
+                show: true,
+                size: 40,
+                gap: 8,
+                splits: (u, axisIdx, scaleMin, scaleMax) => {
+                    if (!(typeof scaleMin === 'number' && scaleMin > 315360000000))
+                        return uPlot.paths.linear;
+                    const range = scaleMax - scaleMin;
+                    const maxTicks = Math.max(2, Math.floor(u.bbox.width / 120));
+                    const intervals = [
+                        60000,120000,300000,600000,900000,1800000,3600000,
+                        7200000,14400000,28800000,43200000,86400000,
+                        172800000,604800000,2592000000,7776000000,31536000000
+                    ];
+                    let step = intervals[intervals.length - 1];
+                    for (const iv of intervals) { if (range / iv <= maxTicks) { step = iv; break; } }
+                    const first = Math.ceil(scaleMin / step) * step;
+                    const splits = [];
+                    for (let v = first; v <= scaleMax; v += step) splits.push(v);
+                    return splits;
+                },
+                values: (u, vals) => {
+                    const s = u.scales.x;
+                    const rangeMs = (s && s.max != null && s.min != null) ? s.max - s.min : null;
+                    return vals.map(v => formatSubplotTick(v, rangeMs));
+                },
+            };
+
+            panelNames.forEach((panelName) => {
+                const seriesMeta = meta[panelName];
+                if (!Array.isArray(seriesMeta) || seriesMeta.length === 0) return;
+
+                const dataArrays = [xValues];
+                const uplotSeries = [{
+                    value: (u, v) => {
+                        const s = u.scales.x;
+                        const r = (s && s.max != null && s.min != null) ? s.max - s.min : null;
+                        return formatSubplotTick(v, r);
+                    },
+                }];
+
+                const barSeriesIndices = [];
+                const scatterSeriesIndices = [];
+
+                seriesMeta.forEach((sm, idx) => {
+                    const arr = data.subplots[sm.key];
+                    if (!Array.isArray(arr)) return;
+                    dataArrays.push(arr);
+                    const sIdx = idx + 1;
+                    const color = sm.color || defaultColors[idx % defaultColors.length];
+
+                    if (sm.type === 'bar') {
+                        uplotSeries.push({
+                            label: sm.label || sm.key,
+                            stroke: 'transparent',
+                            paths: () => null,
+                            points: { show: false },
+                        });
+                        barSeriesIndices.push({ idx: sIdx, color: null });
+                    } else if (sm.type === 'scatter') {
+                        uplotSeries.push({
+                            label: sm.label || sm.key,
+                            stroke: 'transparent',
+                            paths: () => null,
+                            points: { show: false },
+                        });
+                        scatterSeriesIndices.push({ idx: sIdx, color: color, size: 3 });
+                    } else {
+                        uplotSeries.push({
+                            label: sm.label || sm.key,
+                            stroke: color,
+                            width: 2,
+                        });
+                    }
+                });
+
+                if (dataArrays.length < 2) return;
+
+                if (!subplotCharts[panelName]) {
                     const wrapper = document.createElement('div');
                     wrapper.className = 'subplot-wrapper';
-                    wrapper.dataset.name = name;
+                    wrapper.dataset.name = panelName;
                     wrapper.style.height = '150px';
 
                     const title = document.createElement('div');
-                    title.textContent = name;
+                    title.textContent = panelName;
                     title.style.fontSize = '12px';
                     title.style.fontWeight = '600';
                     title.style.marginBottom = '4px';
@@ -346,7 +497,7 @@
 
                     const div = document.createElement('div');
                     div.style.height = '130px';
-                    div.dataset.chartDiv = name;
+                    div.dataset.chartDiv = panelName;
 
                     wrapper.appendChild(title);
                     wrapper.appendChild(div);
@@ -354,79 +505,27 @@
 
                     const resizeHandle = document.createElement('div');
                     resizeHandle.className = 'resize-handle';
-                    resizeHandle.dataset.target = name;
+                    resizeHandle.dataset.target = panelName;
                     container.appendChild(resizeHandle);
-
                     setupResizeHandle(resizeHandle, wrapper, div);
 
-                    const colors = {
-                        RSI_like: '#f44336',
-                        Stoch_like: '#9C27B0',
-                    };
+                    const plugins = [];
+                    if (barSeriesIndices.length > 0) plugins.push(barPlugin(barSeriesIndices));
+                    if (scatterSeriesIndices.length > 0) plugins.push(scatterPlugin(scatterSeriesIndices));
 
                     const chart = new uPlot({
                         width: container.clientWidth || 800,
                         height: 130,
-                        series: [
-                            {
-                                value: (u, v) => {
-                                    const s = u.scales.x;
-                                    const r = (s && s.max != null && s.min != null) ? s.max - s.min : null;
-                                    return formatSubplotTick(v, r);
-                                },
-                            },
-                            {
-                                label: name,
-                                stroke: colors[name] || '#FF9800',
-                                width: 2,
-                            },
-                        ],
-                        scales: {
-                            x: { time: false },
-                            y: { auto: true },
-                        },
-                        axes: [
-                            {
-                                show: true,
-                                size: 40,
-                                gap: 8,
-                                splits: (u, axisIdx, scaleMin, scaleMax) => {
-                                    if (!(typeof scaleMin === 'number' && scaleMin > 315360000000))
-                                        return uPlot.paths.linear;
-                                    const range = scaleMax - scaleMin;
-                                    const maxTicks = Math.max(2, Math.floor(u.bbox.width / 120));
-                                    const intervals = [
-                                        60000,120000,300000,600000,900000,1800000,3600000,
-                                        7200000,14400000,28800000,43200000,86400000,
-                                        172800000,604800000,2592000000,7776000000,31536000000
-                                    ];
-                                    let step = intervals[intervals.length - 1];
-                                    for (const iv of intervals) { if (range / iv <= maxTicks) { step = iv; break; } }
-                                    const first = Math.ceil(scaleMin / step) * step;
-                                    const splits = [];
-                                    for (let v = first; v <= scaleMax; v += step) splits.push(v);
-                                    return splits;
-                                },
-                                values: (u, vals) => {
-                                    const s = u.scales.x;
-                                    const rangeMs = (s && s.max != null && s.min != null) ? s.max - s.min : null;
-                                    return vals.map(v => formatSubplotTick(v, rangeMs));
-                                },
-                            },
-                            {
-                                label: name,
-                                labelSize: 18,
-                            },
-                        ],
-                        cursor: {
-                            drag: { x: false, y: false },
-                            sync: { key: 'pycharting' },
-                        },
-                    }, [xValues, series], div);
+                        series: uplotSeries,
+                        scales: { x: { time: false }, y: { auto: true } },
+                        axes: [xAxisConfig, { label: panelName, labelSize: 18 }],
+                        cursor: { drag: { x: false, y: false }, sync: { key: 'pycharting' } },
+                        plugins: plugins,
+                    }, dataArrays, div);
 
-                    subplotCharts[name] = chart;
+                    subplotCharts[panelName] = chart;
                 } else {
-                    subplotCharts[name].setData([xValues, series]);
+                    subplotCharts[panelName].setData(dataArrays);
                 }
             });
         }

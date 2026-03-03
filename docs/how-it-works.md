@@ -151,16 +151,17 @@ def get_chunk(self, start_index, end_index):
     start_index = max(0, min(start_index, self._length))
     end_index = max(start_index, min(end_index, self._length))
 
-    # Slice every array
+    # Slice every array (including flattened multi-series subplot keys)
     return {
         "index": self._index[start:end],      # converted to Unix ms if datetime
         "open":  self._open[start:end],
         "high":  self._high[start:end],
         "low":   self._low[start:end],
         "close": self._close[start:end],
-        "overlays": { name: arr[start:end] for each overlay },
-        "subplots": { name: arr[start:end] for each subplot },
-        "trades":   self._trades[start:end],   # if present
+        "overlays":    { name: arr[start:end] for each overlay },
+        "subplots":    { name: arr[start:end] for each subplot key },
+        "subplot_meta": self._subplot_meta,    # panel layout descriptors
+        "trades":      self._trades[start:end],   # if present
     }
 ```
 
@@ -197,6 +198,14 @@ graph TD
     D --> F
     E --> F
     G["Measurement overlay\n(separate canvas)"] --> F
+
+    H["Subplot data arrays"] --> I["uPlot engine (per panel)"]
+    I --> J["Line series\n(built-in uPlot)"]
+    I --> K["barPlugin\n(hooks.draw)"]
+    I --> L["scatterPlugin\n(hooks.draw)"]
+    J --> M["Subplot canvas"]
+    K --> M
+    L --> M
 ```
 
 ### Candlestick Plugin
@@ -276,6 +285,59 @@ visibleEnd   = posStart + (scaleMax - xMin) / valuesPerPos;
 
 Subplots are independent uPlot instances stacked below the main chart. Each gets its own wrapper div, title label, and resize handle.
 
+### Subplot data model
+
+The Python API accepts three formats for subplot values:
+
+| Format | Description |
+|---|---|
+| `array` | Single line series (default color) |
+| `{"data": array, "type": "bar"\|"scatter"\|"line", "color": "#hex"}` | Single series with type/color |
+| `[{"data": array, "type": ..., "color": ..., "label": ...}, ...]` | Multi-series panel |
+
+Internally, `validate_input()` normalizes all formats into two structures:
+
+- **`_subplots`**: a flat dict of `name → np.ndarray`. Multi-series panels are flattened with `__` suffixes (e.g., `MACD__0`, `MACD__1`, `MACD__2`).
+- **`_subplot_meta`**: a dict of `panel_name → list[{key, type, color, label}]` describing which data keys belong to each panel and how to render them.
+
+```mermaid
+graph LR
+    A["User: subplots dict"] --> B["validate_input()"]
+    B --> C["_subplots\n(flat key→array)"]
+    B --> D["_subplot_meta\n(panel→series descriptors)"]
+    C --> E["get_chunk()\nslice arrays"]
+    D --> E
+    E --> F["API response\n{subplots, subplot_meta}"]
+```
+
+### Rendering types
+
+Each series within a subplot panel is rendered using one of three types:
+
+| Type | Plugin | Rendering |
+|---|---|---|
+| `line` | Built-in uPlot series | Solid line with configurable stroke color |
+| `bar` | `barPlugin(seriesIndices)` | Vertical bars from y=0; green (`#26a69a`) if value ≥ 0, red (`#ef5350`) if < 0 |
+| `scatter` | `scatterPlugin(seriesIndices)` | Filled circles at data points with configurable color |
+
+Bar and scatter types use a hidden uPlot series (`stroke: 'transparent'`, `paths: () => null`) so uPlot still tracks the data range for axis scaling, while the actual drawing is done by custom plugins in the `draw` hook.
+
+### Multi-series example
+
+A MACD panel with two lines and a histogram:
+
+```python
+"MACD": [
+    {"data": macd_line,   "type": "line", "color": "#2196F3", "label": "MACD"},
+    {"data": signal_line, "type": "line", "color": "#FF9800", "label": "Signal"},
+    {"data": histogram,   "type": "bar",                      "label": "Histogram"},
+]
+```
+
+This creates a single uPlot instance with `data = [xValues, macd, signal, hist]`, two visible line series, and a `barPlugin` drawing the histogram from the third data array.
+
+### Panel layout
+
 ```mermaid
 graph TD
     subgraph Main Chart
@@ -283,17 +345,23 @@ graph TD
     end
 
     subgraph Subplot: RSI
-        S1["uPlot instance\nline series"]
+        S1["uPlot instance\nline + line (SMA overlay)"]
+    end
+
+    subgraph Subplot: MACD
+        S2["uPlot instance\nline + line + barPlugin"]
     end
 
     subgraph Subplot: Volume
-        S2["uPlot instance\nline series"]
+        S3["uPlot instance\nbarPlugin"]
     end
 
     MC -->|"setScale sync"| S1
     MC -->|"setScale sync"| S2
+    MC -->|"setScale sync"| S3
     MC -.->|"cursor sync\n(key: pycharting)"| S1
     MC -.->|"cursor sync\n(key: pycharting)"| S2
+    MC -.->|"cursor sync\n(key: pycharting)"| S3
 ```
 
 **X-axis sync** works two ways:

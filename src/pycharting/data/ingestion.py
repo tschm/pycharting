@@ -179,10 +179,45 @@ def validate_input(
             result["overlays"][name] = arr
     
     # Validate and convert subplots
+    # Supported formats:
+    #   "name": array                    → single line
+    #   "name": {"data": array, "type": "bar"|"scatter", "color": "#hex"}  → single series
+    #   "name": [{"data": array, "type": ..., "color": ..., "label": ...}, ...]  → multi-series panel
+    subplot_meta = {}
     if subplots:
-        for name, data in subplots.items():
-            arr = to_array(data, f"Subplot '{name}'")
-            result["subplots"][name] = arr
+        for name, value in subplots.items():
+            if isinstance(value, list) and len(value) > 0 and isinstance(value[0], dict):
+                panel_series = []
+                for idx, entry in enumerate(value):
+                    key = f"{name}__{idx}"
+                    arr = to_array(entry.get("data"), f"Subplot '{name}[{idx}]'")
+                    result["subplots"][key] = arr
+                    panel_series.append({
+                        "key": key,
+                        "type": entry.get("type", "line"),
+                        "color": entry.get("color"),
+                        "label": entry.get("label", f"{name}_{idx}"),
+                    })
+                subplot_meta[name] = panel_series
+            elif isinstance(value, dict):
+                arr = to_array(value.get("data"), f"Subplot '{name}'")
+                result["subplots"][name] = arr
+                subplot_meta[name] = [{
+                    "key": name,
+                    "type": value.get("type", "line"),
+                    "color": value.get("color"),
+                    "label": name,
+                }]
+            else:
+                arr = to_array(value, f"Subplot '{name}'")
+                result["subplots"][name] = arr
+                subplot_meta[name] = [{
+                    "key": name,
+                    "type": "line",
+                    "color": None,
+                    "label": name,
+                }]
+    result["subplot_meta"] = subplot_meta
     
     return result
 
@@ -214,6 +249,7 @@ class DataManager:
         self._close = validated["close"]
         self._overlays = validated["overlays"]
         self._subplots = validated["subplots"]
+        self._subplot_meta = validated["subplot_meta"]
         self._trades = validated["trades"]
         
         self._length = len(self._index)
@@ -232,6 +268,8 @@ class DataManager:
     def overlays(self) -> Dict[str, np.ndarray]: return self._overlays
     @property
     def subplots(self) -> Dict[str, np.ndarray]: return self._subplots
+    @property
+    def subplot_meta(self) -> Dict[str, list]: return self._subplot_meta
     @property
     def trades(self) -> Optional[np.ndarray]: return self._trades
     @property
@@ -292,5 +330,8 @@ class DataManager:
         
         for name, data in self._subplots.items():
             result["subplots"][name] = data[start_index:end_index].tolist()
+        
+        if self._subplot_meta:
+            result["subplot_meta"] = self._subplot_meta
         
         return result

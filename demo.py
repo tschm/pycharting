@@ -66,7 +66,7 @@ def generate_ohlc(n: int = 1000):
     
     subplots = {
         "RSI": rsi,
-        "Volume": volume,
+        "Volume": {"data": volume, "type": "bar"},
     }
     
     return open_, high, low, close, overlays, subplots
@@ -114,15 +114,51 @@ def run_demo(choice: str):
         plot(numeric_index, open=open_, overlays=overlays, subplots=subplots)
 
     elif choice == "7":
-        print("\n--- Demo: Candlesticks with Trade Arrows ---")
+        print("\n--- Demo: Candlesticks with Trade Arrows + Volume Bars ---")
         date_index = pd.date_range(start="2024-01-01", periods=n, freq="h")
         trades = np.zeros(n, dtype=int)
         signal_mask = np.random.rand(n) < 0.02
         trades[signal_mask] = np.random.choice([-1, 1], size=signal_mask.sum())
+        vol_raw = np.abs(np.random.randn(n)) * 10000 + 5000
+        vol_sign = np.where(close >= open_, 1, -1)
+        signed_vol = vol_raw * vol_sign
+        vol_subplots = {
+            "RSI": subplots["RSI"],
+            "Volume": {"data": signed_vol, "type": "bar"},
+        }
         plot(date_index, open=open_, high=high, low=low, close=close,
-             overlays=overlays, subplots=subplots, trades=trades)
+             overlays=overlays, subplots=vol_subplots, trades=trades)
 
     elif choice == "8":
+        print("\n--- Demo: Multi-Series Subplots (MACD + RSI/SMA + Scatter) ---")
+        date_index = pd.date_range(start="2024-01-01", periods=n, freq="h")
+        rsi = rsi_like(close, 14)
+        rsi_sma = sma(rsi, 20)
+
+        macd_line = ema(close, 12) - ema(close, 26)
+        signal_line = ema(macd_line, 9)
+        histogram = macd_line - signal_line
+
+        events = np.full(n, np.nan)
+        event_mask = np.random.rand(n) < 0.01
+        events[event_mask] = close[event_mask]
+
+        multi_subplots = {
+            "RSI": [
+                {"data": rsi, "type": "line", "color": "#FF9800", "label": "RSI"},
+                {"data": rsi_sma, "type": "line", "color": "#2196F3", "label": "RSI SMA(20)"},
+            ],
+            "MACD": [
+                {"data": macd_line, "type": "line", "color": "#2196F3", "label": "MACD"},
+                {"data": signal_line, "type": "line", "color": "#FF9800", "label": "Signal"},
+                {"data": histogram, "type": "bar", "label": "Histogram"},
+            ],
+            "Events": {"data": events, "type": "scatter", "color": "#9C27B0"},
+        }
+        plot(date_index, open=open_, high=high, low=low, close=close,
+             overlays=overlays, subplots=multi_subplots)
+
+    elif choice == "9":
         print("\n--- Stress Test (1 Million Points) with Indicators ---")
         n_stress = 1_000_000
         o, h, l, c, ovr, sub = generate_ohlc(n_stress)
@@ -146,11 +182,12 @@ def main():
             print("5. Line Chart   - Datetime Index (Close only)")
             print("6. Line Chart   - Open Price only (Flexible Input)")
             print("7. Trade Arrows - Buy/Sell Signals on Chart")
-            print("8. Stress Test  - 1 Million Candles")
+            print("8. Multi-Series - MACD, RSI/SMA, Scatter")
+            print("9. Stress Test  - 1 Million Candles")
             print("0. Exit")
             print("="*40)
             
-            choice = input("Select a demo (0-8): ").strip()
+            choice = input("Select a demo (0-9): ").strip()
             
             if choice == "0":
                 break
