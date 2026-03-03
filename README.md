@@ -206,6 +206,10 @@ Returns a small dict with:
 - `server_info`: host/port and other metadata if running,
 - `active_sessions`: number of registered data sessions.
 
+## How it works
+
+For a detailed technical deep dive into the architecture, data flow, rendering pipeline, and internals, see [docs/how-it-works.md](docs/how-it-works.md).
+
 ## Project structure
 
 The library follows a modern `src/` layout:
