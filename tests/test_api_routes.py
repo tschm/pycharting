@@ -229,3 +229,25 @@ class TestAPIIntegration:
         # Verify all exist
         response = client.get("/api/sessions")
         assert response.json()["count"] == 3
+
+
+class TestErrorPaths:
+    """Tests for internal error handling in routes."""
+
+    def test_get_data_internal_error_returns_500(self, client):
+        from unittest.mock import MagicMock
+        from pycharting.api.routes import _data_managers
+        mock_dm = MagicMock()
+        mock_dm.get_chunk.side_effect = RuntimeError("disk failure")
+        _data_managers["err"] = mock_dm
+        try:
+            response = client.get("/api/data?session_id=err")
+            assert response.status_code == 500
+        finally:
+            _data_managers.pop("err", None)
+
+    def test_initialize_data_internal_error_returns_500(self, client):
+        from unittest.mock import patch
+        with patch("pycharting.data.ingestion.DataManager", side_effect=RuntimeError("boom")):
+            response = client.post("/api/data/init?session_id=err2")
+            assert response.status_code == 500

@@ -220,7 +220,7 @@ def plot(
         print()
         
         # Block until server shutdown if requested
-        if block and _active_server:
+        if block and _active_server:  # pragma: no cover
             logger.info("Blocking until chart is closed (press Ctrl+C to force exit)...")
             print("Keeping server alive until you close the browser page...")
             try:

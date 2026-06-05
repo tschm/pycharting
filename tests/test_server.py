@@ -2,7 +2,7 @@
 
 import pytest
 from fastapi.testclient import TestClient
-from pycharting.core.server import create_app, find_free_port
+from pycharting.core.server import create_app, find_free_port, run_server, NoCacheStaticFiles
 
 
 @pytest.fixture
@@ -187,3 +187,59 @@ class TestAppMetadata:
         assert data["info"]["title"] == "PyCharting"
         assert data["info"]["description"] == "Interactive charting and data visualization API"
         assert data["info"]["version"] == "0.1.0"
+
+
+class TestNoCacheStaticFiles:
+    """Tests for NoCacheStaticFiles middleware."""
+
+    def test_adds_no_cache_headers(self, tmp_path):
+        from fastapi import FastAPI
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("hello")
+
+        app = FastAPI()
+        app.mount("/static", NoCacheStaticFiles(directory=str(tmp_path)), name="static")
+        client = TestClient(app)
+
+        response = client.get("/static/test.txt")
+        assert response.status_code == 200
+        assert "no-cache" in response.headers.get("cache-control", "")
+        assert response.headers.get("pragma") == "no-cache"
+        assert response.headers.get("expires") == "0"
+
+
+class TestRunServer:
+    """Tests for run_server function."""
+
+    def test_run_server_auto_port(self):
+        from unittest.mock import patch, MagicMock
+        with patch("pycharting.core.server.uvicorn") as mock_uvicorn:
+            mock_uvicorn.run = MagicMock()
+            run_server()
+            mock_uvicorn.run.assert_called_once()
+            assert mock_uvicorn.run.call_args.kwargs["port"] > 0
+
+    def test_run_server_specific_port(self):
+        import socket
+        from unittest.mock import patch, MagicMock
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("", 0))
+            free_port = s.getsockname()[1]
+        with patch("pycharting.core.server.uvicorn") as mock_uvicorn:
+            mock_uvicorn.run = MagicMock()
+            run_server(port=free_port, auto_port=False)
+            assert mock_uvicorn.run.call_args.kwargs["port"] == free_port
+
+    def test_run_server_auto_port_fallback(self):
+        import socket
+        from unittest.mock import patch, MagicMock
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("127.0.0.1", 0))
+            occupied = s.getsockname()[1]
+            fallback = occupied + 1
+            with patch("pycharting.core.server.uvicorn") as mock_uvicorn, \
+                 patch("pycharting.core.server.find_free_port", return_value=fallback) as mock_ffp:
+                mock_uvicorn.run = MagicMock()
+                run_server(host="127.0.0.1", port=occupied, auto_port=True)
+                mock_ffp.assert_called_once_with(occupied + 1)
+                assert mock_uvicorn.run.call_args.kwargs["port"] == fallback

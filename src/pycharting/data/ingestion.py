@@ -303,7 +303,7 @@ class DataManager:
             if isinstance(first_elem, (pd.Timestamp, pd.Period)):
                 try:
                     index_list = (pd.Index(index_slice).astype(np.int64) // 1000000).tolist()
-                except (ValueError, TypeError):
+                except (ValueError, TypeError):  # pragma: no cover
                     index_list = index_slice.tolist()
             else:
                 index_list = index_slice.tolist()
