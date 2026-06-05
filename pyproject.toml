@@ -1,12 +1,12 @@
-[tool.poetry]
+[project]
 name = "pycharting"
 version = "0.2.16"
 description = "High-performance financial charting library for OHLC data visualization with technical indicators"
-authors = ["ali askar <26202651+alihaskar@users.noreply.github.com>"]
+authors = [
+    {name = "ali askar", email = "26202651+alihaskar@users.noreply.github.com"},
+]
 readme = "README.md"
-license = "MIT"
-homepage = "https://github.com/alihaskar/pycharting"
-repository = "https://github.com/alihaskar/pycharting"
+license = {text = "MIT"}
 keywords = ["charting", "finance", "ohlc", "technical-indicators", "trading", "visualization"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -18,31 +18,30 @@ classifiers = [
     "Topic :: Office/Business :: Financial",
     "Topic :: Scientific/Engineering :: Visualization",
 ]
-
-# expose the public package as `pycharting`
-packages = [
-    { include = "pycharting", from = "src" }
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0,<1.0.0",
+    "pandas>=2.2.0,<3.0.0",
+    "numpy>=1.26.0,<3.0.0",
+    "pydantic>=2.7.0,<3.0.0",
+    "uvicorn[standard]>=0.24.0,<1.0.0",
+    "pytz>=2024.1,<2026.0",
+    "pyarrow>=22.0.0,<23.0.0",
 ]
 
-# Include package data (web static files)
-include = [
-    { path = "src/pycharting/web/static/**/*", format = ["sdist", "wheel"] }
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0,<9.0.0",
+    "httpx>=0.27.0,<0.29.0",
 ]
 
-[tool.poetry.dependencies]
-python = "^3.12"
-fastapi = ">=0.115.0,<1.0.0"
-pandas = ">=2.2.0,<3.0.0"
-numpy = ">=1.26.0,<3.0.0"
-pydantic = ">=2.7.0,<3.0.0"
-uvicorn = { version = ">=0.24.0,<1.0.0", extras = ["standard"] }
-pytz = ">=2024.1,<2026.0"
-pyarrow = "^22.0.0"
-
-[tool.poetry.group.dev.dependencies]
-pytest = ">=8.3.0,<9.0.0"
-httpx = ">=0.27.0,<0.29.0"
+[project.urls]
+Homepage = "https://github.com/alihaskar/pycharting"
+Repository = "https://github.com/alihaskar/pycharting"
 
 [build-system]
-requires = ["poetry-core>=1.9.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pycharting"]
