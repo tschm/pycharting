@@ -45,7 +45,8 @@ class TestPlotFunction:
         # Create chart without opening browser
         result = plot(
             index, open_data, high, low, close,
-            open_browser=False
+            open_browser=False,
+            block=False
         )
         
         assert result['status'] == 'success'
@@ -63,7 +64,8 @@ class TestPlotFunction:
         result = plot(
             index, data, data + 1, data - 1, data,
             session_id='custom_session',
-            open_browser=False
+            open_browser=False,
+            block=False
         )
         
         assert result['status'] == 'success'
@@ -85,7 +87,8 @@ class TestPlotFunction:
         result = plot(
             index, open_data, high, low, close,
             overlays={'MA10': ma},
-            open_browser=False
+            open_browser=False,
+            block=False
         )
         
         assert result['status'] == 'success'
@@ -103,7 +106,8 @@ class TestPlotFunction:
         result1 = plot(
             index, data, data + 1, data - 1, data,
             session_id='session1',
-            open_browser=False
+            open_browser=False,
+            block=False
         )
         
         first_server_url = result1['server_url']
@@ -112,7 +116,8 @@ class TestPlotFunction:
         result2 = plot(
             index, data, data + 1, data - 1, data,
             session_id='session2',
-            open_browser=False
+            open_browser=False,
+            block=False
         )
         
         assert result2['server_url'] == first_server_url
@@ -128,7 +133,8 @@ class TestPlotFunction:
             np.random.randn(10),
             np.random.randn(10),
             np.random.randn(5),  # Wrong length!
-            open_browser=False
+            open_browser=False,
+            block=False
         )
         
         assert result['status'] == 'error'
@@ -143,7 +149,8 @@ class TestPlotFunction:
         
         result = plot(
             index, data, data + 1, data - 1, data,
-            open_browser=True
+            open_browser=True,
+            block=False
         )
         
         assert result['status'] == 'success'
@@ -162,7 +169,8 @@ class TestPlotFunction:
         # Should still succeed even if browser fails
         result = plot(
             index, data, data + 1, data - 1, data,
-            open_browser=True
+            open_browser=True,
+            block=False
         )
         
         assert result['status'] == 'success'
@@ -179,7 +187,7 @@ class TestStopServer:
         data = np.random.randn(n) + 100
         index = np.arange(n)
         
-        plot(index, data, data + 1, data - 1, data, open_browser=False)
+        plot(index, data, data + 1, data - 1, data, open_browser=False, block=False)
         
         # Now stop it
         stop_server()
@@ -211,7 +219,7 @@ class TestGetServerStatus:
         index = np.arange(n)
         
         # Start server
-        plot(index, data, data + 1, data - 1, data, open_browser=False)
+        plot(index, data, data + 1, data - 1, data, open_browser=False, block=False)
         
         status = get_server_status()
         
@@ -233,7 +241,8 @@ class TestDataTypes:
         
         result = plot(
             index, close, close + 1, close - 1, close,
-            open_browser=False
+            open_browser=False,
+            block=False
         )
         
         assert result['status'] == 'success'
@@ -249,7 +258,8 @@ class TestDataTypes:
             [c + 1 for c in close],
             [c - 1 for c in close],
             close,
-            open_browser=False
+            open_browser=False,
+            block=False
         )
         
         assert result['status'] == 'success'
@@ -272,7 +282,8 @@ class TestIntegration:
         result = plot(
             index, open_data, high, low, close,
             session_id='workflow_test',
-            open_browser=False
+            open_browser=False,
+            block=False
         )
         assert result['status'] == 'success'
         
@@ -299,7 +310,8 @@ class TestIntegration:
             result = plot(
                 index, data, data + 1, data - 1, data,
                 session_id=f'session_{i}',
-                open_browser=False
+                open_browser=False,
+                block=False
             )
             assert result['status'] == 'success'
         
