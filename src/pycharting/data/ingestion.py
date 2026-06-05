@@ -54,11 +54,7 @@ def validate_input(
     elif isinstance(index, np.ndarray):
         index_array = index
     else:
-        # Try converting list/tuple to numpy array
-        try:
-            index_array = np.array(index)
-        except:
-            raise DataValidationError(f"Index must be array-like, got {type(index)}")
+        raise DataValidationError(f"Index must be a pd.Index or np.ndarray, got {type(index)}")
     
     n = len(index_array)
 
@@ -132,22 +128,21 @@ def validate_input(
             final_high = max_oc
         else:
             final_high = high_arr
-            # Validate High >= max(Open, Close)
             if not np.all(final_high >= max_oc):
-                # Optional: warn or correct? Strict validation requested before.
-                # Let's strictly validate if user provided it.
                 invalid_indices = np.where(final_high < max_oc)[0]
-                # raise DataValidationError(f"High must be >= max(Open, Close). Violations at indices: {invalid_indices[:5]}")
-                # Actually, for robustness, let's just clip it?
-                # User data might be messy. Let's trust user data but validate.
-                pass # Allowing dirty data for now, or uncomment raise
+                raise DataValidationError(
+                    f"High must be >= max(Open, Close). Violations at indices: {invalid_indices[:5]}"
+                )
 
         if low_arr is None:
             final_low = min_oc
         else:
             final_low = low_arr
-            # Validate Low <= min(Open, Close)
-            pass
+            if not np.all(final_low <= min_oc):
+                invalid_indices = np.where(final_low > min_oc)[0]
+                raise DataValidationError(
+                    f"Low must be <= min(Open, Close). Violations at indices: {invalid_indices[:5]}"
+                )
 
     # Validate trades: array of +1 (buy/long), -1 (sell/short), 0 (no trade)
     trades_arr = None
@@ -277,7 +272,12 @@ class DataManager:
     def __len__(self) -> int: return self._length
     
     def __repr__(self) -> str:
-        return f"DataManager({self._length} points)"
+        parts = [f"{self._length} points"]
+        if self._overlays:
+            parts.append(f"{len(self._overlays)} overlays")
+        if self._subplots:
+            parts.append(f"{len(self._subplots)} subplots")
+        return f"DataManager({', '.join(parts)})"
     
     def get_chunk(
         self,

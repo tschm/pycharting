@@ -28,9 +28,12 @@ class TestFindFreePort:
     
     def test_raises_on_no_free_port(self):
         """Test that RuntimeError is raised when no port is free."""
-        # Use a very narrow range that's likely all in use or invalid
-        with pytest.raises(RuntimeError, match="No free port found"):
-            find_free_port(1, 2)
+        import socket
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(('127.0.0.1', 0))
+            occupied_port = s.getsockname()[1]
+            with pytest.raises(RuntimeError, match="No free port found"):
+                find_free_port(occupied_port, occupied_port + 1)
 
 
 class TestAppCreation:
