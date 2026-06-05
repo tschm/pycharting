@@ -3,7 +3,7 @@
 import pytest
 import numpy as np
 import time
-from src.data.ingestion import DataManager
+from pycharting.data.ingestion import DataManager
 
 
 class TestGetChunk:

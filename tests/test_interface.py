@@ -5,8 +5,8 @@ import numpy as np
 import time
 from unittest.mock import patch, MagicMock
 
-from src.api.interface import plot, stop_server, get_server_status, _active_server
-from src.api.routes import _data_managers
+from pycharting.api.interface import plot, stop_server, get_server_status, _active_server
+from pycharting.api.routes import _data_managers
 
 
 @pytest.fixture(autouse=True)
