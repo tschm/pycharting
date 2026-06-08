@@ -5,8 +5,8 @@ import numpy as np
 import time
 from unittest.mock import patch, MagicMock
 
-from src.api.interface import plot, stop_server, get_server_status, _active_server
-from src.api.routes import _data_managers
+from pycharting.api.interface import plot, stop_server, get_server_status, _active_server, _repr_html_
+from pycharting.api.routes import _data_managers
 
 
 @pytest.fixture(autouse=True)
@@ -45,7 +45,8 @@ class TestPlotFunction:
         # Create chart without opening browser
         result = plot(
             index, open_data, high, low, close,
-            open_browser=False
+            open_browser=False,
+            block=False
         )
         
         assert result['status'] == 'success'
@@ -63,7 +64,8 @@ class TestPlotFunction:
         result = plot(
             index, data, data + 1, data - 1, data,
             session_id='custom_session',
-            open_browser=False
+            open_browser=False,
+            block=False
         )
         
         assert result['status'] == 'success'
@@ -85,7 +87,8 @@ class TestPlotFunction:
         result = plot(
             index, open_data, high, low, close,
             overlays={'MA10': ma},
-            open_browser=False
+            open_browser=False,
+            block=False
         )
         
         assert result['status'] == 'success'
@@ -103,7 +106,8 @@ class TestPlotFunction:
         result1 = plot(
             index, data, data + 1, data - 1, data,
             session_id='session1',
-            open_browser=False
+            open_browser=False,
+            block=False
         )
         
         first_server_url = result1['server_url']
@@ -112,7 +116,8 @@ class TestPlotFunction:
         result2 = plot(
             index, data, data + 1, data - 1, data,
             session_id='session2',
-            open_browser=False
+            open_browser=False,
+            block=False
         )
         
         assert result2['server_url'] == first_server_url
@@ -128,7 +133,8 @@ class TestPlotFunction:
             np.random.randn(10),
             np.random.randn(10),
             np.random.randn(5),  # Wrong length!
-            open_browser=False
+            open_browser=False,
+            block=False
         )
         
         assert result['status'] == 'error'
@@ -143,7 +149,8 @@ class TestPlotFunction:
         
         result = plot(
             index, data, data + 1, data - 1, data,
-            open_browser=True
+            open_browser=True,
+            block=False
         )
         
         assert result['status'] == 'success'
@@ -162,7 +169,8 @@ class TestPlotFunction:
         # Should still succeed even if browser fails
         result = plot(
             index, data, data + 1, data - 1, data,
-            open_browser=True
+            open_browser=True,
+            block=False
         )
         
         assert result['status'] == 'success'
@@ -179,7 +187,7 @@ class TestStopServer:
         data = np.random.randn(n) + 100
         index = np.arange(n)
         
-        plot(index, data, data + 1, data - 1, data, open_browser=False)
+        plot(index, data, data + 1, data - 1, data, open_browser=False, block=False)
         
         # Now stop it
         stop_server()
@@ -211,7 +219,7 @@ class TestGetServerStatus:
         index = np.arange(n)
         
         # Start server
-        plot(index, data, data + 1, data - 1, data, open_browser=False)
+        plot(index, data, data + 1, data - 1, data, open_browser=False, block=False)
         
         status = get_server_status()
         
@@ -233,7 +241,8 @@ class TestDataTypes:
         
         result = plot(
             index, close, close + 1, close - 1, close,
-            open_browser=False
+            open_browser=False,
+            block=False
         )
         
         assert result['status'] == 'success'
@@ -249,7 +258,8 @@ class TestDataTypes:
             [c + 1 for c in close],
             [c - 1 for c in close],
             close,
-            open_browser=False
+            open_browser=False,
+            block=False
         )
         
         assert result['status'] == 'success'
@@ -272,7 +282,8 @@ class TestIntegration:
         result = plot(
             index, open_data, high, low, close,
             session_id='workflow_test',
-            open_browser=False
+            open_browser=False,
+            block=False
         )
         assert result['status'] == 'success'
         
@@ -299,7 +310,8 @@ class TestIntegration:
             result = plot(
                 index, data, data + 1, data - 1, data,
                 session_id=f'session_{i}',
-                open_browser=False
+                open_browser=False,
+                block=False
             )
             assert result['status'] == 'success'
         
@@ -307,3 +319,98 @@ class TestIntegration:
         assert len(_data_managers) >= 3
         for i in range(3):
             assert f'session_{i}' in _data_managers
+
+
+class TestReprHtml:
+    """Tests for _repr_html_ Jupyter integration."""
+
+    def test_repr_html_when_no_server(self):
+        import pycharting.api.interface as iface
+        original = iface._active_server
+        iface._active_server = None
+        try:
+            html = _repr_html_()
+            assert "Stopped" in html
+        finally:
+            iface._active_server = original
+
+    def test_repr_html_when_server_running(self):
+        n = 50
+        data = np.random.randn(n) + 100
+        index = np.arange(n)
+        plot(index, data, data + 1, data - 1, data, open_browser=False, block=False)
+        html = _repr_html_()
+        assert html is not None
+        assert "<div" in html
+
+
+class TestGetServerStatusNullServer:
+    """Test get_server_status when _active_server is None."""
+
+    def test_returns_not_running_with_none_info(self):
+        import pycharting.api.interface as iface
+        original = iface._active_server
+        iface._active_server = None
+        try:
+            status = get_server_status()
+            assert status["running"] is False
+            assert status["server_info"] is None
+            assert status["active_sessions"] == 0
+        finally:
+            iface._active_server = original
+
+
+class TestListInputConversion:
+    """Test that list inputs for subplots and trades are converted in plot()."""
+
+    def test_plot_with_list_subplots(self):
+        n = 50
+        index = np.arange(n)
+        data = np.random.randn(n) + 100
+        subplots = {"RSI": list(range(n))}
+        result = plot(
+            index, data, data + 1, data - 1, data,
+            subplots=subplots,
+            open_browser=False,
+            block=False,
+        )
+        assert result["status"] == "success"
+
+    def test_plot_with_list_subplots_dict_format(self):
+        n = 50
+        index = np.arange(n)
+        data = np.random.randn(n) + 100
+        subplots = {"Vol": {"data": list(range(n)), "type": "bar"}}
+        result = plot(
+            index, data, data + 1, data - 1, data,
+            subplots=subplots,
+            open_browser=False,
+            block=False,
+        )
+        assert result["status"] == "success"
+
+    def test_plot_with_list_subplots_multi_series(self):
+        n = 50
+        index = np.arange(n)
+        data = np.random.randn(n) + 100
+        subplots = {"MACD": [{"data": list(range(n)), "type": "line"}, {"data": list(range(n)), "type": "bar"}]}
+        result = plot(
+            index, data, data + 1, data - 1, data,
+            subplots=subplots,
+            open_browser=False,
+            block=False,
+        )
+        assert result["status"] == "success"
+
+    def test_plot_with_list_trades(self):
+        n = 50
+        index = np.arange(n)
+        data = np.random.randn(n) + 100
+        trades = [0] * n
+        result = plot(
+            index, data, data + 1, data - 1, data,
+            trades=trades,
+            open_browser=False,
+            block=False,
+        )
+        assert result["status"] == "success"

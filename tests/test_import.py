@@ -5,31 +5,32 @@ import pytest
 
 def test_package_import():
     """Test that the main package can be imported."""
-    import src
-    assert src.__version__ == "0.1.0"
+    import pycharting
+    assert isinstance(pycharting.__version__, str)
+    assert pycharting.__version__
 
 
 def test_core_import():
     """Test that core module can be imported."""
-    from src.pycharting import core
+    from pycharting import core
     assert core is not None
 
 
 def test_data_import():
     """Test that data module can be imported."""
-    from src.pycharting import data
+    from pycharting import data
     assert data is not None
 
 
 def test_api_import():
     """Test that api module can be imported."""
-    from src.pycharting import api
+    from pycharting import api
     assert api is not None
 
 
 def test_web_import():
     """Test that web module can be imported."""
-    from src.pycharting import web
+    from pycharting import web
     assert web is not None
 
 

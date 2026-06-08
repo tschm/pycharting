@@ -336,3 +336,147 @@ class TestDataManager:
         # Expected timestamp (1704067200000 for 2024-01-01 UTC)
         expected_ts = 1704067200000
         assert chunk["index"][0] == expected_ts
+
+
+class TestValidateInputEdgeCases:
+    """Tests for edge cases in validate_input."""
+
+    def test_to_array_none_returns_none(self):
+        index = np.arange(5)
+        close = np.array([100, 102, 103, 104, 105])
+        result = validate_input(index, close=close)
+        assert result["open"] is None
+        assert result["high"] is None
+        assert result["low"] is None
+
+    def test_to_array_list_input(self):
+        index = np.arange(5)
+        result = validate_input(
+            index,
+            [100, 102, 101, 103, 102],
+            [105, 106, 105, 107, 106],
+            [99, 100, 99, 101, 100],
+            [104, 103, 104, 105, 104],
+        )
+        assert isinstance(result["open"], np.ndarray)
+        assert np.array_equal(result["open"], [100, 102, 101, 103, 102])
+
+    def test_to_array_invalid_type_raises(self):
+        index = np.arange(5)
+        with pytest.raises(DataValidationError):
+            validate_input(index, "invalid", np.zeros(5), np.zeros(5), np.zeros(5))
+
+    def test_no_series_raises(self):
+        index = np.arange(5)
+        with pytest.raises(DataValidationError, match="At least one data series"):
+            validate_input(index)
+
+    def test_single_series_mode(self):
+        index = np.arange(5)
+        close = np.array([100, 102, 103, 104, 105])
+        result = validate_input(index, close=close)
+        assert result["open"] is None
+        assert result["high"] is None
+        assert result["low"] is None
+        assert np.array_equal(result["close"], close)
+
+    def test_open_fallback_when_none(self):
+        index = np.arange(5)
+        high = np.array([106, 108, 107, 109, 108])
+        low = np.array([99, 100, 99, 101, 100])
+        close = np.array([104, 103, 104, 105, 104])
+        result = validate_input(index, None, high, low, close)
+        assert np.array_equal(result["open"], close)
+
+    def test_close_fallback_when_none(self):
+        index = np.arange(5)
+        open_data = np.array([100, 102, 101, 103, 102])
+        high = np.array([105, 106, 105, 107, 106])
+        low = np.array([99, 100, 99, 101, 100])
+        result = validate_input(index, open_data, high, low, None)
+        assert np.array_equal(result["close"], open_data)
+
+    def test_high_auto_computed(self):
+        index = np.arange(5)
+        open_data = np.array([100, 102, 101, 103, 102])
+        close = np.array([104, 101, 104, 102, 105])
+        result = validate_input(index, open_data, None, None, close)
+        assert np.array_equal(result["high"], np.maximum(open_data, close))
+
+    def test_low_auto_computed(self):
+        index = np.arange(5)
+        open_data = np.array([100, 102, 101, 103, 102])
+        close = np.array([104, 101, 104, 102, 105])
+        result = validate_input(index, open_data, None, None, close)
+        assert np.array_equal(result["low"], np.minimum(open_data, close))
+
+    def test_trades_valid(self):
+        index = np.arange(5)
+        open_data = np.array([100, 102, 101, 103, 102])
+        high = np.array([105, 106, 105, 107, 106])
+        low = np.array([99, 100, 99, 101, 100])
+        close = np.array([104, 103, 104, 105, 104])
+        trades = np.array([1, 0, -1, 0, 1])
+        result = validate_input(index, open_data, high, low, close, trades=trades)
+        assert result["trades"] is not None
+        assert result["trades"].dtype == np.int8
+
+    def test_trades_invalid_values_raise(self):
+        index = np.arange(5)
+        close = np.array([100, 102, 103, 104, 105])
+        with pytest.raises(DataValidationError, match="Trades array must contain only"):
+            validate_input(index, close=close, trades=np.array([1, 2, -1, 0, 1]))
+
+    def test_subplot_multi_series_format(self):
+        index = np.arange(5)
+        open_data = np.array([100, 102, 101, 103, 102])
+        high = np.array([105, 106, 105, 107, 106])
+        low = np.array([99, 100, 99, 101, 100])
+        close = np.array([104, 103, 104, 105, 104])
+        subplots = {
+            "MACD": [
+                {"data": np.array([1.0, 1.5, 2.0, 1.5, 1.0]), "type": "line", "label": "MACD", "color": "#f00"},
+                {"data": np.array([0.5, 0.8, 1.0, 0.7, 0.5]), "type": "bar"},
+            ]
+        }
+        result = validate_input(index, open_data, high, low, close, subplots=subplots)
+        assert "MACD__0" in result["subplots"]
+        assert "MACD__1" in result["subplots"]
+        assert len(result["subplot_meta"]["MACD"]) == 2
+
+    def test_subplot_dict_format(self):
+        index = np.arange(5)
+        open_data = np.array([100, 102, 101, 103, 102])
+        high = np.array([105, 106, 105, 107, 106])
+        low = np.array([99, 100, 99, 101, 100])
+        close = np.array([104, 103, 104, 105, 104])
+        subplots = {"Volume": {"data": np.array([1000, 1200, 800, 1500, 1100]), "type": "bar", "color": "#0f0"}}
+        result = validate_input(index, open_data, high, low, close, subplots=subplots)
+        assert "Volume" in result["subplots"]
+        assert result["subplot_meta"]["Volume"][0]["type"] == "bar"
+
+
+class TestDataManagerEdgeCases:
+    """Tests for DataManager repr and chunk edge cases."""
+
+    def test_repr_with_subplots(self):
+        index = np.arange(5)
+        open_data = np.array([100, 102, 101, 103, 102])
+        high = np.array([105, 106, 105, 107, 106])
+        low = np.array([99, 100, 99, 101, 100])
+        close = np.array([104, 103, 104, 105, 104])
+        subplots = {"RSI": np.array([55, 58, 52, 60, 57])}
+        dm = DataManager(index, open_data, high, low, close, subplots=subplots)
+        assert "1 subplots" in repr(dm)
+
+    def test_get_chunk_includes_subplot_meta(self):
+        index = np.arange(5)
+        open_data = np.array([100, 102, 101, 103, 102])
+        high = np.array([105, 106, 105, 107, 106])
+        low = np.array([99, 100, 99, 101, 100])
+        close = np.array([104, 103, 104, 105, 104])
+        subplots = {"Volume": np.array([1000, 1200, 1100, 1300, 1150])}
+        dm = DataManager(index, open_data, high, low, close, subplots=subplots)
+        chunk = dm.get_chunk(0, 5)
+        assert "subplot_meta" in chunk
+        assert "Volume" in chunk["subplot_meta"]

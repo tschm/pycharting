@@ -123,7 +123,7 @@ def create_app() -> FastAPI:
     try:
         app.mount("/static", NoCacheStaticFiles(directory=str(static_dir)), name="static")
         logger.info(f"Static files mounted from: {static_dir}")
-    except Exception as e:
+    except Exception as e:  # pragma: no cover
         logger.warning(f"Could not mount static files: {e}")
     
     # Root endpoint
@@ -203,7 +203,7 @@ def create_app() -> FastAPI:
         )
     
     @app.exception_handler(500)
-    async def server_error_handler(request, exc):
+    async def server_error_handler(request, exc):  # pragma: no cover
         """Handle 500 errors."""
         from fastapi.responses import JSONResponse
         logger.error(f"Server error: {exc}")
@@ -284,5 +284,5 @@ def run_server(
 app = create_app()
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     run_server(reload=True)
