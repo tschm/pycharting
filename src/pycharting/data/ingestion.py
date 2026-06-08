@@ -1,5 +1,4 @@
-"""
-Data Ingestion and Validation Module.
+"""Data Ingestion and Validation Module.
 
 This module is responsible for:
 1. Validating input data for integrity and consistency (e.g., ensuring arrays are the same length).
@@ -10,28 +9,29 @@ This module is responsible for:
 The `DataManager` class is the core component here, acting as the optimized data store for a chart session.
 """
 
-from typing import Optional, Union, List, Dict, Any
-import pandas as pd
+from typing import Any
+
 import numpy as np
+import pandas as pd
 
 
 class DataValidationError(Exception):
     """Exception raised when input data fails validation checks."""
+
     pass
 
 
 def validate_input(
-    index: Union[pd.Index, np.ndarray],
-    open: Optional[Union[pd.Series, np.ndarray]] = None,
-    high: Optional[Union[pd.Series, np.ndarray]] = None,
-    low: Optional[Union[pd.Series, np.ndarray]] = None,
-    close: Optional[Union[pd.Series, np.ndarray]] = None,
-    overlays: Optional[Dict[str, Union[pd.Series, np.ndarray]]] = None,
-    subplots: Optional[Dict[str, Union[pd.Series, np.ndarray]]] = None,
-    trades: Optional[Union[pd.Series, np.ndarray, list]] = None,
-) -> Dict[str, Any]:
-    """
-    Validate and normalize input data for OHLC charting.
+    index: pd.Index | np.ndarray,
+    open: pd.Series | np.ndarray | None = None,
+    high: pd.Series | np.ndarray | None = None,
+    low: pd.Series | np.ndarray | None = None,
+    close: pd.Series | np.ndarray | None = None,
+    overlays: dict[str, pd.Series | np.ndarray] | None = None,
+    subplots: dict[str, pd.Series | np.ndarray] | None = None,
+    trades: pd.Series | np.ndarray | list | None = None,
+) -> dict[str, Any]:
+    """Validate and normalize input data for OHLC charting.
 
     Args:
         index (Union[pd.Index, np.ndarray]): The x-axis data.
@@ -41,6 +41,7 @@ def validate_input(
         close (Optional[Union[pd.Series, np.ndarray]]): Closing prices.
         overlays (Optional[Dict[str, Union[pd.Series, np.ndarray]]]): Dictionary of overlay series.
         subplots (Optional[Dict[str, Union[pd.Series, np.ndarray]]]): Dictionary of subplot series.
+        trades (Optional[Union[pd.Series, np.ndarray, list]]): Trade signals: 1 (buy), -1 (sell), 0 (none).
 
     Returns:
         Dict[str, Any]: A dictionary containing normalized `numpy.ndarray` objects for all inputs.
@@ -54,12 +55,14 @@ def validate_input(
     elif isinstance(index, np.ndarray):
         index_array = index
     else:
-        raise DataValidationError(f"Index must be a pd.Index or np.ndarray, got {type(index)}")
-    
+        msg = f"Index must be a pd.Index or np.ndarray, got {type(index)}"
+        raise DataValidationError(msg)
+
     n = len(index_array)
 
     # Helper function to convert to numpy array
-    def to_array(data: Optional[Union[pd.Series, np.ndarray, list]], name: str) -> Optional[np.ndarray]:
+    def to_array(data: pd.Series | np.ndarray | list | None, name: str) -> np.ndarray | None:
+        """Convert data to a numpy array, validating length against the index."""
         if data is None:
             return None
         if isinstance(data, pd.Series):
@@ -69,10 +72,12 @@ def validate_input(
         elif isinstance(data, list):
             arr = np.array(data)
         else:
-            raise DataValidationError(f"{name} must be array-like, got {type(data)}")
-        
+            msg = f"{name} must be array-like, got {type(data)}"
+            raise DataValidationError(msg)
+
         if len(arr) != n:
-            raise DataValidationError(f"{name} length ({len(arr)}) does not match index length ({n})")
+            msg = f"{name} length ({len(arr)}) does not match index length ({n})"
+            raise DataValidationError(msg)
         return arr
 
     # Convert inputs
@@ -84,13 +89,18 @@ def validate_input(
     # Determine Chart Mode
     # 1. Identify provided series
     provided_series = []
-    if open_arr is not None: provided_series.append(open_arr)
-    if high_arr is not None: provided_series.append(high_arr)
-    if low_arr is not None: provided_series.append(low_arr)
-    if close_arr is not None: provided_series.append(close_arr)
+    if open_arr is not None:
+        provided_series.append(open_arr)
+    if high_arr is not None:
+        provided_series.append(high_arr)
+    if low_arr is not None:
+        provided_series.append(low_arr)
+    if close_arr is not None:
+        provided_series.append(close_arr)
 
     if len(provided_series) == 0:
-        raise DataValidationError("At least one data series (Open, High, Low, or Close) must be provided.")
+        msg = "At least one data series (Open, High, Low, or Close) must be provided."
+        raise DataValidationError(msg)
 
     if len(provided_series) == 1:
         # Single Series Mode -> Line Chart
@@ -103,21 +113,16 @@ def validate_input(
     else:
         # Multi Series Mode -> Candlestick Chart
         # Auto-fill missing data to ensure valid candles
-        
-        # 1. Ensure we have Open and Close
-        if open_arr is None and close_arr is not None:
-            final_open = close_arr # Fallback
-        else:
-            final_open = open_arr
 
-        if close_arr is None and open_arr is not None:
-            final_close = open_arr # Fallback
-        else:
-            final_close = close_arr
-            
+        # 1. Ensure we have Open and Close
+        final_open = close_arr if open_arr is None and close_arr is not None else open_arr
+        final_close = open_arr if close_arr is None and open_arr is not None else close_arr
+
         # If both were somehow None (should be caught by len check, but logic check):
-        if final_open is None: final_open = provided_series[0]
-        if final_close is None: final_close = provided_series[0]
+        if final_open is None:
+            final_open = provided_series[0]
+        if final_close is None:
+            final_close = provided_series[0]
 
         # 2. Ensure High and Low
         # If missing, calc from open/close
@@ -130,9 +135,8 @@ def validate_input(
             final_high = high_arr
             if not np.all(final_high >= max_oc):
                 invalid_indices = np.where(final_high < max_oc)[0]
-                raise DataValidationError(
-                    f"High must be >= max(Open, Close). Violations at indices: {invalid_indices[:5]}"
-                )
+                msg = f"High must be >= max(Open, Close). Violations at indices: {invalid_indices[:5]}"
+                raise DataValidationError(msg)
 
         if low_arr is None:
             final_low = min_oc
@@ -140,20 +144,18 @@ def validate_input(
             final_low = low_arr
             if not np.all(final_low <= min_oc):
                 invalid_indices = np.where(final_low > min_oc)[0]
-                raise DataValidationError(
-                    f"Low must be <= min(Open, Close). Violations at indices: {invalid_indices[:5]}"
-                )
+                msg = f"Low must be <= min(Open, Close). Violations at indices: {invalid_indices[:5]}"
+                raise DataValidationError(msg)
 
     # Validate trades: array of +1 (buy/long), -1 (sell/short), 0 (no trade)
     trades_arr = None
     if trades is not None:
         trades_arr = to_array(trades, "Trades")
         unique = set(np.unique(trades_arr).tolist())
-        valid_vals = {-1, 0, 1, -1.0, 0.0, 1.0}
+        valid_vals = {-1, 0, 1, -1.0}
         if not unique.issubset(valid_vals):
-            raise DataValidationError(
-                f"Trades array must contain only -1, 0, or 1. Found: {unique - valid_vals}"
-            )
+            msg = f"Trades array must contain only -1, 0, or 1. Found: {unique - valid_vals}"
+            raise DataValidationError(msg)
         trades_arr = trades_arr.astype(np.int8)
 
     result = {
@@ -166,13 +168,13 @@ def validate_input(
         "subplots": {},
         "trades": trades_arr,
     }
-    
+
     # Validate and convert overlays
     if overlays:
         for name, data in overlays.items():
             arr = to_array(data, f"Overlay '{name}'")
             result["overlays"][name] = arr
-    
+
     # Validate and convert subplots
     # Supported formats:
     #   "name": array                    → single line
@@ -187,55 +189,60 @@ def validate_input(
                     key = f"{name}__{idx}"
                     arr = to_array(entry.get("data"), f"Subplot '{name}[{idx}]'")
                     result["subplots"][key] = arr
-                    panel_series.append({
-                        "key": key,
-                        "type": entry.get("type", "line"),
-                        "color": entry.get("color"),
-                        "label": entry.get("label", f"{name}_{idx}"),
-                    })
+                    panel_series.append(
+                        {
+                            "key": key,
+                            "type": entry.get("type", "line"),
+                            "color": entry.get("color"),
+                            "label": entry.get("label", f"{name}_{idx}"),
+                        }
+                    )
                 subplot_meta[name] = panel_series
             elif isinstance(value, dict):
                 arr = to_array(value.get("data"), f"Subplot '{name}'")
                 result["subplots"][name] = arr
-                subplot_meta[name] = [{
-                    "key": name,
-                    "type": value.get("type", "line"),
-                    "color": value.get("color"),
-                    "label": name,
-                }]
+                subplot_meta[name] = [
+                    {
+                        "key": name,
+                        "type": value.get("type", "line"),
+                        "color": value.get("color"),
+                        "label": name,
+                    }
+                ]
             else:
                 arr = to_array(value, f"Subplot '{name}'")
                 result["subplots"][name] = arr
-                subplot_meta[name] = [{
-                    "key": name,
-                    "type": "line",
-                    "color": None,
-                    "label": name,
-                }]
+                subplot_meta[name] = [
+                    {
+                        "key": name,
+                        "type": "line",
+                        "color": None,
+                        "label": name,
+                    }
+                ]
     result["subplot_meta"] = subplot_meta
-    
+
     return result
 
 
 class DataManager:
-    """
-    High-performance data container and manager.
-    """
-    
+    """High-performance data container and manager."""
+
     def __init__(
         self,
-        index: Union[pd.Index, np.ndarray],
-        open: Optional[Union[pd.Series, np.ndarray]] = None,
-        high: Optional[Union[pd.Series, np.ndarray]] = None,
-        low: Optional[Union[pd.Series, np.ndarray]] = None,
-        close: Optional[Union[pd.Series, np.ndarray]] = None,
-        overlays: Optional[Dict[str, Union[pd.Series, np.ndarray]]] = None,
-        subplots: Optional[Dict[str, Union[pd.Series, np.ndarray]]] = None,
-        trades: Optional[Union[pd.Series, np.ndarray, list]] = None,
+        index: pd.Index | np.ndarray,
+        open: pd.Series | np.ndarray | None = None,
+        high: pd.Series | np.ndarray | None = None,
+        low: pd.Series | np.ndarray | None = None,
+        close: pd.Series | np.ndarray | None = None,
+        overlays: dict[str, pd.Series | np.ndarray] | None = None,
+        subplots: dict[str, pd.Series | np.ndarray] | None = None,
+        trades: pd.Series | np.ndarray | list | None = None,
     ):
+        """Validate and store OHLC data, overlays, subplots, and trade signals."""
         # Validate input and get normalized arrays
         validated = validate_input(index, open, high, low, close, overlays, subplots, trades)
-        
+
         # Store references
         self._index = validated["index"]
         self._open = validated["open"]
@@ -246,58 +253,102 @@ class DataManager:
         self._subplots = validated["subplots"]
         self._subplot_meta = validated["subplot_meta"]
         self._trades = validated["trades"]
-        
+
         self._length = len(self._index)
-    
+
     @property
-    def index(self) -> np.ndarray: return self._index
+    def index(self) -> np.ndarray:
+        """The x-axis index array."""
+        return self._index
+
     @property
-    def open(self) -> Optional[np.ndarray]: return self._open
+    def open(self) -> np.ndarray | None:
+        """Opening price array, or None for line charts."""
+        return self._open
+
     @property
-    def high(self) -> Optional[np.ndarray]: return self._high
+    def high(self) -> np.ndarray | None:
+        """High price array, or None for line charts."""
+        return self._high
+
     @property
-    def low(self) -> Optional[np.ndarray]: return self._low
+    def low(self) -> np.ndarray | None:
+        """Low price array, or None for line charts."""
+        return self._low
+
     @property
-    def close(self) -> Optional[np.ndarray]: return self._close
+    def close(self) -> np.ndarray | None:
+        """Closing price array."""
+        return self._close
+
     @property
-    def overlays(self) -> Dict[str, np.ndarray]: return self._overlays
+    def overlays(self) -> dict[str, np.ndarray]:
+        """Dictionary of named overlay series rendered on the main price pane."""
+        return self._overlays
+
     @property
-    def subplots(self) -> Dict[str, np.ndarray]: return self._subplots
+    def subplots(self) -> dict[str, np.ndarray]:
+        """Dictionary of named subplot series rendered in separate panes."""
+        return self._subplots
+
     @property
-    def subplot_meta(self) -> Dict[str, list]: return self._subplot_meta
+    def subplot_meta(self) -> dict[str, list]:
+        """Metadata for subplot panels describing series type, color, and label."""
+        return self._subplot_meta
+
     @property
-    def trades(self) -> Optional[np.ndarray]: return self._trades
+    def trades(self) -> np.ndarray | None:
+        """Trade signal array of int8 values: 1 (buy), -1 (sell), 0 (none)."""
+        return self._trades
+
     @property
-    def length(self) -> int: return self._length
-    def __len__(self) -> int: return self._length
-    
+    def length(self) -> int:
+        """Number of data points in the dataset."""
+        return self._length
+
+    def __len__(self) -> int:
+        """Return the number of data points."""
+        return self._length
+
     def __repr__(self) -> str:
+        """Return a concise string representation of the DataManager."""
         parts = [f"{self._length} points"]
         if self._overlays:
             parts.append(f"{len(self._overlays)} overlays")
         if self._subplots:
             parts.append(f"{len(self._subplots)} subplots")
         return f"DataManager({', '.join(parts)})"
-    
+
     def get_chunk(
         self,
-        start_index: Optional[int] = None,
-        end_index: Optional[int] = None,
-    ) -> Dict[str, Any]:
+        start_index: int | None = None,
+        end_index: int | None = None,
+    ) -> dict[str, Any]:
+        """Return a JSON-serializable slice of all data arrays.
+
+        Args:
+            start_index: Inclusive start of the slice (defaults to 0).
+            end_index: Exclusive end of the slice (defaults to the full length).
+
+        Returns:
+            Dict with sliced lists for index, OHLC, overlays, subplots, and trades.
+        """
         # Handle default values
-        if start_index is None: start_index = 0
-        if end_index is None: end_index = self._length
-        
+        if start_index is None:
+            start_index = 0
+        if end_index is None:
+            end_index = self._length
+
         # Clamp indices
         start_index = max(0, min(start_index, self._length))
         end_index = max(start_index, min(end_index, self._length))
-        
+
         # Slice index array
         index_slice = self._index[start_index:end_index]
-        
+
         # Convert datetime types to Unix timestamps (milliseconds) for JavaScript
         if np.issubdtype(index_slice.dtype, np.datetime64):
-            index_list = (index_slice.astype('datetime64[ms]').astype(np.int64)).tolist()
+            index_list = (index_slice.astype("datetime64[ms]").astype(np.int64)).tolist()
         elif len(index_slice) > 0:
             first_elem = index_slice[0]
             if isinstance(first_elem, (pd.Timestamp, pd.Period)):
@@ -309,9 +360,10 @@ class DataManager:
                 index_list = index_slice.tolist()
         else:
             index_list = index_slice.tolist()
-        
+
         # Helper for slicing optional arrays
         def slice_opt(arr):
+            """Slice an optional array and convert to a list, returning None if absent."""
             return arr[start_index:end_index].tolist() if arr is not None else None
 
         result = {
@@ -324,14 +376,14 @@ class DataManager:
             "subplots": {},
             "trades": slice_opt(self._trades),
         }
-        
+
         for name, data in self._overlays.items():
             result["overlays"][name] = data[start_index:end_index].tolist()
-        
+
         for name, data in self._subplots.items():
             result["subplots"][name] = data[start_index:end_index].tolist()
-        
+
         if self._subplot_meta:
             result["subplot_meta"] = self._subplot_meta
-        
+
         return result

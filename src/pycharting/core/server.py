@@ -1,5 +1,4 @@
-"""
-Core Server Module for PyCharting.
+"""Core Server Module for PyCharting.
 
 This module implements the FastAPI-based web server that powers the interactive charts.
 It handles serving static assets (HTML, JS, CSS) and providing API endpoints for data retrieval.
@@ -14,21 +13,22 @@ Key Responsibilities:
 - **Server Execution:** Launching the Uvicorn server.
 """
 
-import socket
 import logging
+import socket
 from pathlib import Path
-from typing import Optional
-from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.staticfiles import StaticFiles
+
+import uvicorn
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
-import uvicorn
+from fastapi.staticfiles import StaticFiles
 
 
 class NoCacheStaticFiles(StaticFiles):
     """Custom StaticFiles that adds no-cache headers for development."""
-    
+
     async def get_response(self, path: str, scope) -> Response:
+        """Return the static file response with no-cache headers."""
         response = await super().get_response(path, scope)
         # Add no-cache headers to prevent browser caching during development
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
@@ -36,17 +36,14 @@ class NoCacheStaticFiles(StaticFiles):
         response.headers["Expires"] = "0"
         return response
 
+
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
 def find_free_port(start_port: int = 8000, end_port: int = 9000) -> int:
-    """
-    Find an available TCP port in the specified range.
+    """Find an available TCP port in the specified range.
 
     This utility function iterates through a range of ports to find one that is currently
     not in use. This is crucial for ensuring the chart server can start without conflicts,
@@ -71,18 +68,18 @@ def find_free_port(start_port: int = 8000, end_port: int = 9000) -> int:
     for port in range(start_port, end_port):
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.bind(('', port))
+                s.bind(("", port))
                 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 return port
         except OSError:
             continue
-    
-    raise RuntimeError(f"No free port found in range {start_port}-{end_port}")
+
+    msg = f"No free port found in range {start_port}-{end_port}"
+    raise RuntimeError(msg)
 
 
 def create_app() -> FastAPI:
-    """
-    Create and configure the FastAPI application instance.
+    """Create and configure the FastAPI application instance.
 
     This factory function initializes the FastAPI app with necessary configurations:
     - Sets up metadata (title, description, version).
@@ -105,7 +102,7 @@ def create_app() -> FastAPI:
         docs_url="/api/docs",
         redoc_url="/api/redoc",
     )
-    
+
     # Configure CORS middleware
     app.add_middleware(
         CORSMiddleware,
@@ -114,18 +111,18 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    
+
     # Set up static files directory
     static_dir = Path(__file__).parent.parent / "web" / "static"
     static_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Mount static files with no-cache headers for development
     try:
         app.mount("/static", NoCacheStaticFiles(directory=str(static_dir)), name="static")
         logger.info(f"Static files mounted from: {static_dir}")
     except Exception as e:  # pragma: no cover
         logger.warning(f"Could not mount static files: {e}")
-    
+
     # Root endpoint
     @app.get("/", response_class=HTMLResponse)
     async def root():
@@ -181,48 +178,44 @@ def create_app() -> FastAPI:
         </body>
         </html>
         """
-    
+
     # Include API routes
     from pycharting.api.routes import router as api_router
+
     app.include_router(api_router)
-    
+
     # Health check endpoint
     @app.get("/health")
     async def health_check():
         """Health check endpoint."""
         return {"status": "healthy", "service": "pycharting"}
-    
+
     # Error handlers
     @app.exception_handler(404)
     async def not_found_handler(request, exc):
         """Handle 404 errors."""
         from fastapi.responses import JSONResponse
-        return JSONResponse(
-            status_code=404,
-            content={"error": "Not found", "path": str(request.url.path)}
-        )
-    
+
+        return JSONResponse(status_code=404, content={"error": "Not found", "path": str(request.url.path)})
+
     @app.exception_handler(500)
     async def server_error_handler(request, exc):  # pragma: no cover
         """Handle 500 errors."""
         from fastapi.responses import JSONResponse
+
         logger.error(f"Server error: {exc}")
-        return JSONResponse(
-            status_code=500,
-            content={"error": "Internal server error"}
-        )
-    
+        return JSONResponse(status_code=500, content={"error": "Internal server error"})
+
     return app
 
 
 def run_server(
     host: str = "127.0.0.1",
-    port: Optional[int] = None,
+    port: int | None = None,
     auto_port: bool = True,
     reload: bool = False,
 ) -> None:
-    """
-    Launch the PyCharting web server.
+    """Launch the PyCharting web server.
 
     This function is the main entry point for running the server directly (e.g., for development).
     It handles port selection, application creation, and starting the Uvicorn server process.
@@ -265,12 +258,12 @@ def run_server(
             logger.warning(f"Port {port} is in use, finding alternative...")
             port = find_free_port(port + 1)
             logger.info(f"Using alternative port: {port}")
-    
+
     app = create_app()
-    
+
     logger.info(f"Starting PyCharting server at http://{host}:{port}")
     logger.info(f"API documentation available at http://{host}:{port}/api/docs")
-    
+
     uvicorn.run(
         app,
         host=host,
