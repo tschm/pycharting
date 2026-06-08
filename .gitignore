@@ -1,21 +1,61 @@
-# Python
+### Python template
+.idea
+.venv
+.ruff_cache
+.ty_cache
+
+# HTML outputs from docstring examples (e.g. report.save("output/..."))
+output/
+
+### Don't expose API keys, etc.
+.env
+
+__marimo__
+
+_tests
+_book
+_pdoc
+docs/notebooks/*.html
+docs/reports
+docs/reports.md
+_marimushka
+_mkdocs
+_benchmarks
+_jupyter
+_site
+
+# LaTeX build artifacts
+docs/paper/*.aux
+docs/paper/*.fdb_latexmk
+docs/paper/*.fls
+docs/paper/*.log
+docs/paper/*.out
+docs/paper/*.toc
+
+# temp file used by Junie
+.output.txt
+
+# folder used for programs, e.g. uv, uvx, task, etc.
+bin
+
+# Byte-compiled / optimized / DLL files
 __pycache__/
-**/__pycache__/
 *.py[cod]
 *$py.class
-*.so
-.Python
 
-# Virtual environments
-venv/
-.venv/
-env/
-.env/
-ENV/
-env.bak/
-venv.bak/
+# Generated presentation files
+presentation.html
+presentation.pdf
+*.pptx
+
+# C extensions
+*.so
+
+# .DS_Store
+.DS_Store
 
 # Distribution / packaging
+.Python
 build/
 develop-eggs/
 dist/
@@ -28,16 +68,17 @@ parts/
 sdist/
 var/
 wheels/
+share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
 MANIFEST
 
-# PyInstaller
-*.manifest
-*.spec
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
 
-# Unit test / coverage
+# Unit test / coverage reports
 htmlcov/
 .tox/
 .nox/
@@ -46,64 +87,36 @@ htmlcov/
 .cache
 nosetests.xml
 coverage.xml
+coverage.json
 *.cover
+*.py,cover
 .hypothesis/
+.benchmarks/
 .pytest_cache/
+cover/
 
-# Logs
-logs/
+# Security scanning baselines (regenerate as needed)
+.bandit-baseline.json
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-dev-debug.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
 
-# Environment variables
-.env
-.env.local
-.env.*.local
+# Flask stuff:
+instance/
+.webassets-cache
 
-# Editor directories and files
-.idea/
-.vscode/
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-*.swp
-*~
+# Cython debug symbols
+cython_debug/
 
-# OS specific
-.DS_Store
-Thumbs.db
+# Makefile
+local.mk
 
-# Project specific
-data/
-!src/pycharting/data/
-*.csv
-*.parquet
+.bandit-baseline.json
 
-# Ignore Taskmaster and cursor folders, and their contents, anywhere in the project
-.taskmaster/
-taskmaster/
-cursor/
-.cursor/
-
-# Do NOT ignore .cursor and .taskmaster if they are inside node_modules
-!node_modules/.cursor/
-!node_modules/.taskmaster/
-
-
-# Dependency directories
-node_modules/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# Poetry
-poetry.lock
-
-
-# Exclude everything in folder demo and its content
-/demos/
