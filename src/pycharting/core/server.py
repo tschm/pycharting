@@ -42,29 +42,48 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 
-def find_free_port(start_port: int = 8000, end_port: int = 9000) -> int:
-    """Find an available TCP port in the specified range.
+def find_free_port(start_port: int | None = None, end_port: int | None = None) -> int:
+    """Find an available TCP port.
 
-    This utility function iterates through a range of ports to find one that is currently
-    not in use. This is crucial for ensuring the chart server can start without conflicts,
-    even if the default port is occupied or multiple instances are running.
+    When called with no arguments (the default), the operating system is asked for an
+    ephemeral port by binding to port ``0``. The kernel guarantees a unique free port,
+    which avoids the race where several processes scanning from the same start port all
+    pick the same number (e.g. multiple ``pytest-xdist`` workers each defaulting to 8000).
+
+    When an explicit ``start_port`` is given, the function instead scans upward for the
+    first available port, which is useful for honouring a preferred port range.
 
     Args:
-        start_port (int): The starting port number to search from (inclusive). Defaults to 8000.
-        end_port (int): The ending port number to search to (exclusive). Defaults to 9000.
+        start_port (Optional[int]): The starting port number to search from (inclusive).
+            If ``None`` (default), an OS-assigned ephemeral port is returned instead of scanning.
+        end_port (Optional[int]): The ending port number to search to (exclusive). Only used
+            when ``start_port`` is provided; defaults to ``start_port + 1000``.
 
     Returns:
-        int: An available port number found within the range.
+        int: An available port number.
 
     Raises:
-        RuntimeError: If no free port can be found in the specified range.
+        RuntimeError: If no free port can be found in the requested range.
 
     Example:
         ```python
+        # Let the OS pick a guaranteed-free ephemeral port.
+        port = find_free_port()
+
+        # Scan a preferred range instead.
         port = find_free_port(8000, 8010)
-        print(f"Found free port: {port}")
         ```
     """
+    # No range requested: let the OS hand out a guaranteed-unique ephemeral port.
+    if start_port is None:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            s.bind(("", 0))
+            return s.getsockname()[1]
+
+    if end_port is None:
+        end_port = start_port + 1000
+
     for port in range(start_port, end_port):
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
