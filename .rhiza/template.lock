@@ -85,5 +85,5 @@ files:
 - ruff.toml
 profiles:
 - github-project
-synced_at: '2026-06-08T09:26:45Z'
+synced_at: '2026-06-13T10:52:58Z'
 strategy: merge
