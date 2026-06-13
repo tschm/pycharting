@@ -1,5 +1,4 @@
-"""
-PyCharting: Interactive Financial Charting Library.
+"""PyCharting: Interactive Financial Charting Library.
 
 This package provides a high-performance, interactive charting solution for financial data
 (OHLC), designed to handle large datasets efficiently. It uses a local server architecture
@@ -39,11 +38,9 @@ Exports:
     - `get_server_status`: Function to check the status of the background server.
 """
 
-from typing import Any, Dict  # re-exported types are only for type checkers
+from .api.interface import get_server_status, plot, stop_server  # type: ignore F401
 
-from .api.interface import plot, stop_server, get_server_status  # type: ignore F401
-
-__all__ = ["plot", "stop_server", "get_server_status", "__version__"]
+__all__ = ["__version__", "get_server_status", "plot", "stop_server"]
 
 # Keep this in sync with pyproject.toml
 __version__ = "0.2.14"
