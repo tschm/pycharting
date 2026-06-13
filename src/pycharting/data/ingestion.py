@@ -62,6 +62,7 @@ def validate_input(
 
     # Helper function to convert to numpy array
     def to_array(data: pd.Series | np.ndarray | list | None, name: str) -> np.ndarray | None:
+        """Convert ``data`` to a length-validated numpy array, or ``None`` if not provided."""
         if data is None:
             return None
         if isinstance(data, pd.Series):
@@ -352,6 +353,7 @@ class DataManager:
 
         # Helper for slicing optional arrays
         def slice_opt(arr):
+            """Return the requested slice of ``arr`` as a list, or ``None`` if ``arr`` is ``None``."""
             return arr[start_index:end_index].tolist() if arr is not None else None
 
         result = {
