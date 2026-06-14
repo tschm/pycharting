@@ -173,7 +173,10 @@ class TestDataManager:
         low = np.array([99, 100, 99])
         close = np.array([104, 103, 104])
 
-        dm = DataManager(index, open_data, high, low, close)
+        trades = np.array([1, 0, -1])
+        subplots = {"Volume": {"data": np.array([10, 20, 30]), "type": "bar"}}
+
+        dm = DataManager(index, open_data, high, low, close, subplots=subplots, trades=trades)
 
         assert np.array_equal(dm.index, index)
         assert np.array_equal(dm.open, open_data)
@@ -182,6 +185,8 @@ class TestDataManager:
         assert np.array_equal(dm.close, close)
         assert isinstance(dm.overlays, dict)
         assert isinstance(dm.subplots, dict)
+        assert np.array_equal(dm.trades, trades)
+        assert dm.subplot_meta["Volume"][0]["type"] == "bar"
 
     def test_with_overlays_and_subplots(self):
         """Test initialization with overlays and subplots."""
@@ -403,6 +408,16 @@ class TestValidateInputEdgeCases:
         low = np.array([99, 100, 99, 101, 100])
         result = validate_input(index, open_data, high, low, None)
         assert np.array_equal(result["close"], open_data)
+
+    def test_open_close_fallback_when_both_none(self):
+        """When neither open nor close is given, both fall back to the first provided series."""
+        index = np.arange(5)
+        high = np.array([106, 108, 107, 109, 108])
+        low = np.array([99, 100, 99, 101, 100])
+        result = validate_input(index, None, high, low, None)
+        # high is the first provided series, so open and close both default to it.
+        assert np.array_equal(result["open"], high)
+        assert np.array_equal(result["close"], high)
 
     def test_high_auto_computed(self):
         """Verify high is auto-computed as the element-wise maximum of open and close."""

@@ -9,10 +9,15 @@ This module is responsible for:
 The `DataManager` class is the core component here, acting as the optimized data store for a chart session.
 """
 
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
+
+# A single subplot panel may be supplied as a plain array, as a config dict
+# ({"data": ..., "type": ..., "color": ..., "label": ...}), or as a list of such
+# dicts for a multi-series panel.
+SubplotSpec = pd.Series | np.ndarray | list | dict[str, Any]
 
 
 class DataValidationError(Exception):
@@ -22,13 +27,13 @@ class DataValidationError(Exception):
 
 
 def validate_input(
-    index: pd.Index | np.ndarray,
+    index: pd.Index | pd.Series | np.ndarray,
     open: pd.Series | np.ndarray | None = None,
     high: pd.Series | np.ndarray | None = None,
     low: pd.Series | np.ndarray | None = None,
     close: pd.Series | np.ndarray | None = None,
-    overlays: dict[str, pd.Series | np.ndarray] | None = None,
-    subplots: dict[str, pd.Series | np.ndarray] | None = None,
+    overlays: dict[str, pd.Series | np.ndarray | list] | None = None,
+    subplots: dict[str, SubplotSpec] | None = None,
     trades: pd.Series | np.ndarray | list | None = None,
 ) -> dict[str, Any]:
     """Validate and normalize input data for OHLC charting.
@@ -51,7 +56,7 @@ def validate_input(
         DataValidationError: If any validation check fails.
     """
     # Convert index to numpy array if needed
-    if isinstance(index, pd.Index):
+    if isinstance(index, (pd.Index, pd.Series)):
         index_array = index.to_numpy()
     elif isinstance(index, np.ndarray):
         index_array = index
@@ -150,11 +155,14 @@ def validate_input(
     trades_arr = None
     if trades is not None:
         trades_arr = to_array(trades, "Trades")
-        unique = set(np.unique(trades_arr).tolist())
-        valid_vals = {-1, 0, 1, -1.0}
-        if not unique.issubset(valid_vals):
-            raise DataValidationError(f"Trades array must contain only -1, 0, or 1. Found: {unique - valid_vals}")  # noqa: TRY003
-        trades_arr = trades_arr.astype(np.int8)
+        if trades_arr is not None:
+            unique = set(np.unique(trades_arr).tolist())
+            valid_vals = {-1, 0, 1, -1.0}
+            if not unique.issubset(valid_vals):
+                raise DataValidationError(  # noqa: TRY003
+                    f"Trades array must contain only -1, 0, or 1. Found: {unique - valid_vals}"
+                )
+            trades_arr = trades_arr.astype(np.int8)
 
     result = {
         "index": index_array,
@@ -183,7 +191,8 @@ def validate_input(
         for name, value in subplots.items():
             if isinstance(value, list) and len(value) > 0 and isinstance(value[0], dict):
                 panel_series = []
-                for idx, entry in enumerate(value):
+                for idx, raw_entry in enumerate(value):
+                    entry = cast("dict[str, Any]", raw_entry)
                     key = f"{name}__{idx}"
                     arr = to_array(entry.get("data"), f"Subplot '{name}[{idx}]'")
                     result["subplots"][key] = arr
@@ -197,13 +206,14 @@ def validate_input(
                     )
                 subplot_meta[name] = panel_series
             elif isinstance(value, dict):
-                arr = to_array(value.get("data"), f"Subplot '{name}'")
+                spec = cast("dict[str, Any]", value)
+                arr = to_array(spec.get("data"), f"Subplot '{name}'")
                 result["subplots"][name] = arr
                 subplot_meta[name] = [
                     {
                         "key": name,
-                        "type": value.get("type", "line"),
-                        "color": value.get("color"),
+                        "type": spec.get("type", "line"),
+                        "color": spec.get("color"),
                         "label": name,
                     }
                 ]
@@ -228,13 +238,13 @@ class DataManager:
 
     def __init__(
         self,
-        index: pd.Index | np.ndarray,
+        index: pd.Index | pd.Series | np.ndarray,
         open: pd.Series | np.ndarray | None = None,
         high: pd.Series | np.ndarray | None = None,
         low: pd.Series | np.ndarray | None = None,
         close: pd.Series | np.ndarray | None = None,
-        overlays: dict[str, pd.Series | np.ndarray] | None = None,
-        subplots: dict[str, pd.Series | np.ndarray] | None = None,
+        overlays: dict[str, pd.Series | np.ndarray | list] | None = None,
+        subplots: dict[str, SubplotSpec] | None = None,
         trades: pd.Series | np.ndarray | list | None = None,
     ):
         """Validate the supplied series and store the normalized arrays for fast slicing."""

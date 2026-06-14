@@ -27,12 +27,25 @@ class TestFindFreePort:
         port2 = find_free_port(8100, 8200)
         assert port1 != port2 or port1 < 8100
 
+    def test_scans_from_start_with_default_end(self):
+        """When only start_port is given, the end of the range defaults to start_port + 1000."""
+        port = find_free_port(8000)
+        assert 8000 <= port < 9000
+
+    def test_returns_ephemeral_port_with_no_arguments(self):
+        """With no arguments, an OS-assigned ephemeral port is returned."""
+        port = find_free_port()
+        assert port > 0
+
     def test_raises_on_no_free_port(self):
         """Test that RuntimeError is raised when no port is free."""
         import socket
 
+        # Bind on the same interface find_free_port scans ("" / all interfaces).
+        # On Windows, 127.0.0.1:port does not conflict with 0.0.0.0:port, so the
+        # occupied port must be claimed on the same address to be seen as taken.
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind(("127.0.0.1", 0))
+            s.bind(("", 0))
             occupied_port = s.getsockname()[1]
             with pytest.raises(RuntimeError, match="No free port found"):
                 find_free_port(occupied_port, occupied_port + 1)
