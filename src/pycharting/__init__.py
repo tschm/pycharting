@@ -38,7 +38,7 @@ Exports:
     - `get_server_status`: Function to check the status of the background server.
 """
 
-from .api.interface import get_server_status, plot, stop_server  # type: ignore F401
+from .api.interface import get_server_status, plot, stop_server
 
 __all__ = ["__version__", "get_server_status", "plot", "stop_server"]
 

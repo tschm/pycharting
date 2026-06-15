@@ -15,6 +15,8 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Office/Business :: Financial",
     "Topic :: Scientific/Engineering :: Visualization",
 ]
@@ -27,17 +29,26 @@ dependencies = [
     "uvicorn[standard]>=0.24.0,<1.0.0",
 ]
 
-[project.optional-dependencies]
-dev = [
+[dependency-groups]
+# Test-only tooling, used under tests/ (which deptry does not scan), not in the
+# src/ package. Declared as PEP 735 dependency groups so `uv run` installs them
+# by default (see [tool.uv].default-groups) — this keeps `uv run pytest` working
+# without `--all-extras`, including under `--resolution lowest-direct`. httpx is
+# required transitively by fastapi.testclient but must be pinned directly so the
+# lowest-direct resolver still installs it.
+test = [
     "pytest>=8.3.0,<9.0.0",
     "pytest-cov>=6.0.0",
     "httpx>=0.27.0,<0.29.0",
 ]
+lint = [
+    "ruff>=0.6.0",
+]
 
-[tool.deptry]
-# The "dev" optional-dependency group holds test-only tooling that is used
-# under tests/ (which deptry does not scan), not in the src/ package.
-pep621_dev_dependency_groups = ["dev"]
+[tool.uv]
+# Install the test and lint groups by default so `uv run` has them available
+# without an explicit `--group`/`--all-groups` flag.
+default-groups = ["test", "lint"]
 
 [project.urls]
 Homepage = "https://github.com/alihaskar/pycharting"

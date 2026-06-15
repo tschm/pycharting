@@ -17,14 +17,14 @@ and Jupyter notebook integration.
 import logging
 import time
 import webbrowser
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
 
 from pycharting.api.routes import _data_managers
 from pycharting.core.lifecycle import ChartServer
-from pycharting.data.ingestion import DataManager
+from pycharting.data.ingestion import DataManager, SubplotSpec
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ def plot(
     low: np.ndarray | pd.Series | list | None = None,
     close: np.ndarray | pd.Series | list | None = None,
     overlays: dict[str, np.ndarray | pd.Series | list] | None = None,
-    subplots: dict[str, np.ndarray | pd.Series | list] | None = None,
+    subplots: dict[str, SubplotSpec] | None = None,
     trades: np.ndarray | pd.Series | list | None = None,
     session_id: str = "default",
     port: int | None = None,
@@ -141,7 +141,7 @@ def plot(
             overlays = {k: np.array(v) if isinstance(v, list) else v for k, v in overlays.items()}
 
         if subplots:
-            converted = {}
+            converted: dict[str, SubplotSpec] = {}
             for k, v in subplots.items():
                 if isinstance(v, list) and len(v) > 0 and isinstance(v[0], dict):
                     converted[k] = [
@@ -155,7 +155,7 @@ def plot(
                     ]
                 elif isinstance(v, dict):
                     d = v.get("data")
-                    converted[k] = {**v, "data": np.array(d) if isinstance(d, list) else d}
+                    converted[k] = cast("dict[str, Any]", {**v, "data": np.array(d) if isinstance(d, list) else d})
                 else:
                     converted[k] = np.array(v) if isinstance(v, list) else v
             subplots = converted
