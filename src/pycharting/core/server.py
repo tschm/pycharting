@@ -143,7 +143,7 @@ def create_app() -> FastAPI:
 
     # Root endpoint
     @app.get("/", response_class=HTMLResponse)
-    async def root():
+    async def root() -> str:
         """Serve the main chart page."""
         return """
         <!DOCTYPE html>

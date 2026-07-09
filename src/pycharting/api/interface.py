@@ -258,7 +258,7 @@ def plot(
         return result
 
 
-def stop_server():
+def stop_server() -> None:
     """Manually shut down the active chart server.
 
     While the server has an auto-shutdown feature (triggered after a timeout when no clients are connected),
@@ -322,7 +322,7 @@ def get_server_status() -> dict[str, Any]:
 
 
 # Jupyter notebook support
-def _repr_html_():
+def _repr_html_() -> str:
     """Jupyter notebook representation."""
     status = get_server_status()
     if status["running"]:

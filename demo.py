@@ -72,7 +72,7 @@ def generate_ohlc(n: int = 1000):
     return open_, high, low, close, overlays, subplots
 
 
-def run_demo(choice: str):
+def run_demo(choice: str) -> None:
     """Run the selected demo scenario identified by ``choice``."""
     n = 5000  # Default size
 
@@ -174,7 +174,7 @@ def run_demo(choice: str):
         print("Invalid choice.")
 
 
-def main():
+def main() -> None:
     """Run the interactive demo menu loop."""
     try:
         while True:
