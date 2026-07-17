@@ -23,8 +23,6 @@ SubplotSpec = pd.Series | np.ndarray | list | dict[str, Any]
 class DataValidationError(Exception):
     """Exception raised when input data fails validation checks."""
 
-    pass
-
 
 def validate_input(
     index: pd.Index | pd.Series | np.ndarray,
@@ -246,7 +244,7 @@ class DataManager:
         overlays: dict[str, pd.Series | np.ndarray | list] | None = None,
         subplots: dict[str, SubplotSpec] | None = None,
         trades: pd.Series | np.ndarray | list | None = None,
-    ):
+    ) -> None:
         """Validate the supplied series and store the normalized arrays for fast slicing."""
         # Validate input and get normalized arrays
         validated = validate_input(index, open, high, low, close, overlays, subplots, trades)
